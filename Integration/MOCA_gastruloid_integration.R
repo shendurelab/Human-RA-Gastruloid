@@ -1,3 +1,7 @@
+#This script integrate MOCA E8.5-13.5 mouse embryo dataset (Cao et al., 2019, Qiu et al., 2022) with mouse gastruloids at 120hr (Van de Brink et al., 2020) and human RA gastruloids at 120hr
+#Link to MOCA and mouse gastruloid datasets are provided in https://shendure-web.gs.washington.edu/content/members/hGastruloid_website/public/
+#Human gastrloid datasets from this paper are provided at National Center for Biotechnology Information (NCBI) Gene Expression Omnibus (GEO) under accession numbers GSE208369
+
 suppressPackageStartupMessages({
 options(stringsAsFactors = FALSE)
 library(Matrix)
@@ -10,7 +14,9 @@ library(readr)
 library(reticulate)
         })
 
-fig.dir = '~/shendure_lab/hGastruloid_figures/' ## change the output dir for figures
+options(future.globals.maxSize= 50000 * 1024^2)
+df_biomart <- read.table(paste0(data_dir,'ref/mart_export_human_mouse.txt'), header=T)
+df_biomart$link = paste0(df_biomart$Mouse_ID,"-",df_biomart$Human_ID)
 
 downsample <- function(obj, subset){
     if(subset<1){
@@ -22,13 +28,16 @@ downsample <- function(obj, subset){
     return(obj)
 }
 
+geo_dir = './geo/' #GSE208369
+data_dir = './hGastruloid_website/public/' #https://shendure-web.gs.washington.edu/content/members/hGastruloid_website/public/
 
-MOCA_e8_5b <- readRDS('/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/exp/obj_E8.5b_exp.rds')
-MOCA_e9_5 <- readRDS('/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/exp/obj_E9.5_exp.rds')
-MOCA_e10_5 <- readRDS('/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/exp/obj_E10.5_exp.rds')
-MOCA_e11_5 <- readRDS('/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/exp/obj_E11.5_exp.rds')
-MOCA_e12_5 <- readRDS('/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/exp/obj_E12.5_exp.rds')
-MOCA_e13_5 <- readRDS('/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/exp/obj_E13.5_exp.rds')
+
+MOCA_e8_5b <- readRDS(paste0(data_dir,'MOCA/obj_E8.5b_exp.rds'))
+MOCA_e9_5 <- readRDS(paste0(data_dir,'MOCA/obj_E9.5_exp.rds'))
+MOCA_e10_5 <- readRDS(paste0(data_dir,'MOCA/obj_E10.5_exp.rds'))
+MOCA_e11_5 <- readRDS(paste0(data_dir,'MOCA/obj_E11.5_exp.rds'))
+MOCA_e12_5 <- readRDS(paste0(data_dir,'MOCA/obj_E12.5_exp.rds'))
+MOCA_e13_5 <- readRDS(paste0(data_dir,'MOCA/obj_E13.5_exp.rds'))
 
 
 MOCA_e8_5b$timepoint="MOCA_8_5b"
@@ -38,12 +47,12 @@ MOCA_e11_5$timepoint="MOCA_11_5"
 MOCA_e12_5$timepoint="MOCA_12_5"
 MOCA_e13_5$timepoint="MOCA_13_5"
 
-MOCA_e8_5b.anno <- readRDS("/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/anno/obj_E8.5b_anno.rds")
-MOCA_e9_5.anno <- readRDS("/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/anno/obj_E9.5_anno.rds")
-MOCA_e10_5.anno <- readRDS("/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/anno/obj_E10.5_anno.rds")
-MOCA_e11_5.anno <- readRDS("/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/anno/obj_E11.5_anno.rds")
-MOCA_e12_5.anno <- readRDS("/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/anno/obj_E12.5_anno.rds")
-MOCA_e13_5.anno <- readRDS("/net/shendure/vol10/projects/cxqiu/nobackup/work/tome/revision/anno/obj_E13.5_anno.rds")
+MOCA_e8_5b.anno <- readRDS(paste0(data_dir,'MOCA/obj_E8.5b_anno.rds'))
+MOCA_e9_5.anno <- readRDS(paste0(data_dir,'MOCA/obj_E9.5_anno.rds'))
+MOCA_e10_5.anno <- readRDS(paste0(data_dir,'MOCA/obj_E10.5_anno.rds'))
+MOCA_e11_5.anno <- readRDS(paste0(data_dir,'MOCA/obj_E11.5_anno.rds'))
+MOCA_e12_5.anno <- readRDS(paste0(data_dir,'MOCA/obj_E12.5_anno.rds'))
+MOCA_e13_5.anno <- readRDS(paste0(data_dir,'MOCA/obj_E13.5_anno.rds'))
 
 
 MOCA_e8_5b@meta.data$e8_5_Anno <- MOCA_e8_5b.anno[colnames(MOCA_e8_5b),]$Anno
@@ -75,12 +84,7 @@ obj_1 <- merge(x= downsample(MOCA_e8_5b,50000),
                          downsample(MOCA_e13_5,50000)),
           add.cell.ids = c("e8_5","e9_5","e10_5","e11_5","e12_5","e13_5"))
 
-options(future.globals.maxSize= 50000 * 1024^2)
-df_biomart <- read.table("/net/shendure/vol1/home/weiy666/shendure_lab/sci-fate/data/20201211_sci-plex-fate/mart_export_human_mouse.txt", header=T)
-df_biomart$link = paste0(df_biomart$Mouse_ID,"-",df_biomart$Human_ID)
-
 ###################### MOCA lift-over 
-# You can use my MOCA reference or make your own reference with the following code
 project_name="MOCA_integrated"
 MOCA_cell <- obj_1@meta.data
 MOCA_gene <- obj_1[['RNA']][[]]
@@ -94,8 +98,7 @@ assay = "RNA",
 meta.data = MOCA_cell)
 
 ##################### Gastruloids lift-over
-processed.dir <- '/net/shendure/vol8/projects/Wei_hGastruloid/nobackup/processed_data/hGastruloids/' #Choose your gastruloid directory
-obj_2 <- readRDS(paste0(processed.dir,'hGastruloids_RA_120h_rna_processed.RDS'))
+obj_2 <- readRDS(paste0(geo_dir,'RA_hGas_120h.RDS'))   
 hg_cells <- obj_2@meta.data
 hg_gene <- obj_2[['RNA']][[]]
 hg_mtx <- GetAssayData(object = obj_2, slot = "counts")
@@ -108,11 +111,9 @@ assay = "RNA",
 meta.data =  hg_cells)
 obj_2$timepoint = "RA_120h"
 obj_2$gastruloid1.cluster=obj_2$seurat_clusters
-obj_2$batch='10x_hg_1'  #We are going to correct by batch, so make sure to set batch on each different samples
+obj_2$batch='10x_hg_1'  #Set batch on each different samples
 
-
-mouse.dir <- '/net/shendure/vol8/projects/Wei_hGastruloid/nobackup/processed_data/mGastruloids/'
-obj_3=readRDS(paste0(mouse.dir,'mGastruloids_120h_rna.RDS'))
+obj_3=readRDS(paste0(data_dir,'mouse_gastruloid/VDB_mGastruloids_120h_rna.RDS'))
 obj_3 <- obj_3[,!is.na(obj_3$VDB_clusters)]
 mg_cells <- obj_3@meta.data
 mg_gene <- obj_3[['RNA']][[]]
@@ -133,7 +134,7 @@ obj_2<-obj_2[homologs,]
 obj_3<-obj_3[homologs,]
 
 
-obj = merge(x=obj_1, y=c(obj_2,obj_4,obj_3))
+obj = merge(x=obj_1, y=c(obj_2,obj_3),add.cell.ids= c('MOCA','"RA_120h','mg_120h'))
 obj.list <- SplitObject(object = obj, split.by = "batch")
 obj.list <- lapply(X = obj.list, FUN = SCTransform)
 obj.features <- SelectIntegrationFeatures(object.list = obj.list, nfeatures = 3000)
@@ -148,6 +149,16 @@ DefaultAssay(object = obj.integrated) <- "integrated"
 obj <- obj.integrated
 obj <- RunPCA(object = obj, verbose = FALSE)
 obj <- RunUMAP(object = obj, reduction = "pca", dims = 1:30, min.dist = 0.3)
+
+pdf(file='~/MOCA85_135_mG_hG.pdf',width=30,height=20)
+p1<-DimPlot(obj, reduction = "umap",  label = TRUE, group.by="Anno",pt.size=0.0001,
+    label.size = 5, repel = TRUE, shuffle=TRUE, order=TRUE,raster=T)+NoLegend() 
+p2<-DimPlot(obj, reduction = "umap",  label = TRUE, group.by="cell_type",pt.size=0.0001,
+    label.size = 8, repel = TRUE, shuffle=FALSE, order=TRUE,raster=T)
+p1+p2
+dev.off()
+
+
 
 
                 

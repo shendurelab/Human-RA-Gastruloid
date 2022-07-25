@@ -1,11 +1,12 @@
-#This script integrate scRNA-seq datasets of Pijuan-sala et al., 2019 and original human gastruloids 24-96hr
+#This script performs PCA-based whole organism molecular staging
+#Pseudobulk matrices are outputs from Pseudobulk_datasets.R and provided within the same folder
+#Link to human embryo CS7 dataset (Tyser et al., 2021) and CS12-16 dataset (Xu et al., 2021) are provided in https://shendure-web.gs.washington.edu/content/members/hGastruloid_website/public/
 
 suppressPackageStartupMessages({
 options(stringsAsFactors = FALSE)
 library(Matrix)
 library(Seurat)
 library(ggplot2)
-library(patchwork)
 library(dplyr)
 library(stringr)
 library(readr)
@@ -13,13 +14,15 @@ library(pheatmap)
         })
         
 set.seed(2021)
-df_biomart <- read.table("../data/mart_export_human_mouse.txt", header=T)
+
+data_dir = './hGastruloid_website/public/' #https://shendure-web.gs.washington.edu/content/members/hGastruloid_website/public/
+df_biomart <- read.table(paste0(data_dir,'/ref/mart_export_human_mouse.txt'), header=T)
 df_biomart$link = paste0(df_biomart$Mouse_ID,"-",df_biomart$Human_ID)
 
 #MOCA 
 MOCA_mtx <- readRDS('./MOCA_mtx_noExE.RDS')
 MOCA_mtx_meta <- readRDS('./MOCA_mtx_meta.RDS')
-embryo_info <- readRDS('./MOCAE85_embryo_info.rds')
+embryo_info <- readRDS('./MOCA_E85_embryo_info.rds')
 embryo_info$embryo = gsub('E8.5_','E8.5b_',embryo_info$RT_group)
 MOCA_cell <- data.frame(embryo=colnames(MOCA_mtx),day=str_split_fixed(colnames(MOCA_mtx),'_',2)[,1])
 MOCA_cell$dataset='MOCA'
@@ -59,7 +62,7 @@ query_cell_st <- data.frame(embryo=colnames(query_mtx_st),
 
 #HEOA human embryos
 #Preprocess HEOA dataset as described in paper
-HEOA_dir <- '/net/shendure/vol1/home/weiy666/nobackups/journal_datasets/Human_CS12-16_Atlas/'
+HEOA_dir <- paste0(data_dir,'Human_CS12-16_Atlas/')
 HEOA_cell <- read_csv(paste0(HEOA_dir,'GSE157329_cell_annotate.csv'))
 HEOA_cell <- HEOA_cell%>%data.frame
 HEOA_gene <- read_csv(paste0(HEOA_dir,'GSE157329_gene_annotate.csv'))
@@ -71,15 +74,14 @@ colnames(HEOA_mtx) <- row.names(HEOA_cell)
 row.names(HEOA_mtx) <- row.names(HEOA_gene)
 HEOA_cell$embryo_id <- str_split_fixed(HEOA_cell$cell_id,'_',2)[,1]
 # prepare genes to be removed: hemoglobin genes, MT genes, sex-specific genes, cell cycle genes, and batch-effect genes.
-list_dir = paste0(HEOA_dir,'heoa/list/')
+list_dir = paste0(HEOA_dir,'list/')
 cc_gene<- scan(paste0(list_dir,'total_cc.txt'),what=character(0)) # cell cycle genes, merged from: pubmed ID 25378319; pubmed ID 30452682
 hb_gene<- scan(paste0(list_dir,'hb_gene.txt'),what=character(0)) # hemoglobin genes
 mt_gene<-HEOA_gene$gene_id[grepl(pattern='^MT-', x= HEOA_gene$gene_short_name)] # MT genes
 bt_gene<- unique(HEOA_gene[HEOA_gene$gene_short_name %in% scan(paste0(list_dir,'batch.txt'),what=character(0)),]$gene_id)  # batch-effect genes (including sex-specific genes), merged from: pubmed ID 30096314; pubmed ID 31835037
 rm_gene<- unique(c(cc_gene, hb_gene, mt_gene, bt_gene))
-HEOA_dir <- '/net/shendure/vol1/home/weiy666/nobackups/journal_datasets/Human_CS12-16_Atlas/'
-hvg <- readLines(paste0(HEOA_dir,'output/hvg.txt'))
-pb_mtx <- readRDS(paste0(HEOA_dir,'output/pseudobulk_heoa.RDS'))
+hvg <- readLines(paste0(list_dir,'hvg.txt'))
+pb_mtx <- readRDS(paste0(list_dir,'pseudobulk_heoa.RDS'))
 pb_mtx_hvg <- pb_mtx[hvg,]
 pb_cell <- HEOA_cell%>%group_by(embryo, stage)%>%summarise(n=n())%>%data.frame
 row.names(pb_cell) <- pb_cell$embryo
@@ -88,10 +90,10 @@ names(pb_cell)[2]='day'
 pb_cell$dataset='HEOA'
 pb_cell$somite_number=NA
 
-
+##########marker
 #CS7
-human_CS7_mtx <- readRDS('/net/shendure/vol1/home/weiy666/nobackups/journal_datasets/Human_CS7/human_CS7_raw_matrix.rds')
-human_CS7_meta <- readRDS('/net/shendure/vol1/home/weiy666/nobackups/journal_datasets/Human_CS7/human_CS7_gastrula_meta.rds')
+human_CS7_mtx <- readRDS(paste0(data_dir,'Human_CS7/human_CS7_raw_matrix.rds'))
+human_CS7_meta <- readRDS(paste0(data_dir,'Human_CS7/human_CS7_gastrula_meta.rds'))
 human_CS7_mtx <- t(human_CS7_mtx)
 human_CS7_rna <- CreateSeuratObject(human_CS7_mtx, project = "human_CS7", 
                    assay = "RNA",
@@ -127,7 +129,6 @@ row.names(cs7_cell) <- cs7_cell$embryo
 #Subset HEOA dataset to CS12/13
 pb_mtx_hvg_sub <- pb_mtx_hvg[,1:2]
 row.names(pb_mtx_hvg_sub) <- row.names(pb_mtx_hvg)
-dim(pb_mtx_hvg_sub)
 #Convert gene IDs of HEOA to match gene names of CS7
 df_heoa <- df_biomart[df_biomart$Human_ID %in% row.names(pb_mtx_hvg_sub),]
 pb_mtx_hvg_sub <- pb_mtx_hvg_sub[df_heoa$Human_ID,]
@@ -146,11 +147,8 @@ heoa_cs7_hG_cell<-rbind(query_cell_hG,heoa_sub_cs7_cell)
 row.names(heoa_cs7_hG_cell) <- heoa_cs7_hG_cell$embryo
 
 #Gene sets
-obj_heoa_cs7_hG <- readRDS('~/nobackups/HEOA_hG_coembed.RDS')
-Human_link_gene_set <- row.names(obj_heoa_cs7_hG)
-Human_link_gene_set <- df_biomart[df_biomart$link %in% Human_link_gene_set,]$Human_name
-select_genes <- Human_link_gene_set
-heoa_cs7_hG_mtx_subset <- heoa_cs7_hG_mtx[row.names(heoa_cs7_hG_mtx) %in% select_genes,]
+gene_set <- readRDS('./PCA_geneset.RDS')
+heoa_cs7_hG_mtx_subset <- heoa_cs7_hG_mtx[row.names(heoa_cs7_hG_mtx) %in% gene_set,]
 
 #Co-embed
 obj_heoa_cs7_hG <- CreateSeuratObject(counts=heoa_cs7_hG_mtx_subset,meta.data=heoa_cs7_hG_cell)
@@ -160,7 +158,7 @@ VariableFeatures(obj_heoa_cs7_hG)  <- row.names(obj_heoa_cs7_hG)
 obj_heoa_cs7_hG <- ScaleData(obj_heoa_cs7_hG,verbose=F)
 obj_heoa_cs7_hG  <- RunPCA(obj_heoa_cs7_hG,verbose=F,npcs=6)
 options(repr.plot.width=6, repr.plot.height=6)
-#DimPlot(obj_heoa_cs7_hG,group.by='day',pt.size=2.5,label=T,repel=T,label.size=4)+NoLegend()+ggtitle('Human sample all cells')
+DimPlot(obj_heoa_cs7_hG,group.by='day',pt.size=2.5,label=T,repel=T,label.size=4)+NoLegend()+ggtitle('Human sample all cells')
 
 #Correlation
 emb_heoa_cs7_hG <- Embeddings(obj_heoa_cs7_hG,reduction='pca')
@@ -174,7 +172,7 @@ mat <- GetAssayData(obj_heoa_cs7_hG,assay='RNA',slot='scale.data')
 colnames(mat)=obj_heoa_cs7_hG$day
 options(repr.plot.width=8, repr.plot.height=12)
 annotation_df <- data.frame(row.names=names(cor_top100),annotation=ifelse(cor_top100>0,'negative','positive'))
-#ph=pheatmap(mat[names(cor_top100),],cluster_cols = TRUE, annotation_row = annotation_df)
+ph=pheatmap(mat[names(cor_top100),],cluster_cols = TRUE, annotation_row = annotation_df)
 
 ###########################
 #Projection of somitoids onto human gastruloid and embryo space
@@ -194,11 +192,10 @@ obj_heoa_cs7_hG_st <- NormalizeData(obj_heoa_cs7_hG_st ,verbose=F)
 obj_heoa_cs7_hG_st <- ScaleData(obj_heoa_cs7_hG_st ,verbose=F)
 homologs <- intersect(row.names(obj_heoa_cs7_hG_st[['RNA']]@scale.data),row.names(irlba_heoa_cs7_hG))
 VariableFeatures(obj_heoa_cs7_hG_st)=row.names(obj_heoa_cs7_hG_st)
-#obj_heoa_cs7_hG_st  <- RunPCA(obj_heoa_cs7_hG_st,verbose=F,npcs=11)
 heoa_cs7_hG_st_emb <- t(obj_heoa_cs7_hG_st[['RNA']]@scale.data[homologs,]) %*% irlba_heoa_cs7_hG[homologs,]
 obj_heoa_cs7_hG_st[['pca']] <- CreateDimReducObject(embeddings = heoa_cs7_hG_st_emb , key = "PCA_", assay = DefaultAssay(obj_heoa_cs7_hG_st))
 options(repr.plot.width=6, repr.plot.height=6)
-#DimPlot(obj_heoa_cs7_hG_st , group.by='day',pt.size=3,label=T,repel=T,label.size=5)+NoLegend()
+DimPlot(obj_heoa_cs7_hG_st , group.by='day',pt.size=3,label=T,repel=T,label.size=5)+NoLegend()
 
 ###########################
 #Projection of mouse gastruloids, MOCA onto human gastruloid and embryo space
@@ -212,7 +209,7 @@ df_human <- df_biomart[df_biomart$Human_name %in% row.names(heoa_cs7_hG_st_mtx),
 heoa_cs7_hG_st_mtx <- heoa_cs7_hG_st_mtx[df_human$Human_name,]
 row.names(heoa_cs7_hG_st_mtx) <- df_human$link
 #Combine query_mtx (MOCA,mG,hG) and CS7-CS12
-MOCA_cell_8_11 <- MOCA_cell[MOCA_cell$day %in% c('E8.5b','E9.5','E10.5'),]#,'E11.5','E12.5','E13.5'),]
+MOCA_cell_8_11 <- MOCA_cell[MOCA_cell$day %in% c('E8.5b','E9.5','E10.5'),]
 homologs <- Reduce(intersect,list(row.names(MOCA_mtx[,row.names(MOCA_cell_8_11)]),row.names(heoa_cs7_hG_st_mtx)))
 moca_heoa_cs7_hG_mtx <- cbind(MOCA_mtx[homologs,row.names(MOCA_cell_8_11)],heoa_cs7_hG_st_mtx[homologs,])
 moca_heoa_cs7_hG_cell<-rbind(MOCA_cell_8_11,heoa_cs7_hG_st_cell)
@@ -225,13 +222,13 @@ homologs <- intersect(row.names(obj_moca_heoa_cs7_hG [['RNA']]@scale.data),row.n
 moca_heoa_cs7_hG_emb <- t(obj_moca_heoa_cs7_hG[['RNA']]@scale.data[homologs,]) %*% irlba_heoa_cs7_hG[homologs,]
 obj_moca_heoa_cs7_hG[['pca']] <- CreateDimReducObject(embeddings = moca_heoa_cs7_hG_emb , key = "PCA_", assay = DefaultAssay(obj_moca_heoa_cs7_hG))
 options(repr.plot.width=6, repr.plot.height=6)
-#DimPlot(obj_moca_heoa_cs7_hG , group.by='day',pt.size=3,label=T,repel=T,label.size=5)+NoLegend()
+DimPlot(obj_moca_heoa_cs7_hG , group.by='day',pt.size=3,label=T,repel=T,label.size=5)+NoLegend()
 
 ###########################
 #Projection of mouse gastruloids, MOCA and pijuan onto human gastruloid and embryo space
 ###########################
 #Convert pijuan genes to link
-pijuan_cell_7_8 <- pijuan_cell[pijuan_cell$day %in% c(#'E6','E6.75',
+pijuan_cell_7_8 <- pijuan_cell[pijuan_cell$day %in% c(
                                                       'E7','E7.25','E7.5','E7.75','E8','E8.25','E8.5'),]
 df_pijuan <- df_biomart[df_biomart$Mouse_ID %in% row.names(pijuan_mtx),]
 pijuan_mtx_link <- pijuan_mtx[df_pijuan$Mouse_ID,]
@@ -249,7 +246,7 @@ homologs <- intersect(row.names(obj_pijuan_moca_heoa_cs7_hG [['RNA']]@scale.data
 pijuan_moca_heoa_cs7_hG_emb <- t(obj_pijuan_moca_heoa_cs7_hG[['RNA']]@scale.data[homologs,]) %*% irlba_heoa_cs7_hG[homologs,]
 obj_pijuan_moca_heoa_cs7_hG[['pca']] <- CreateDimReducObject(embeddings = pijuan_moca_heoa_cs7_hG_emb , key = "PCA_", assay = DefaultAssay(obj_pijuan_moca_heoa_cs7_hG))
 options(repr.plot.width=6, repr.plot.height=6)
-#DimPlot(obj_pijuan_moca_heoa_cs7_hG , group.by='day',pt.size=2.5,label=T,repel=T,label.size=4)+NoLegend()
+DimPlot(obj_pijuan_moca_heoa_cs7_hG , group.by='day',pt.size=2.5,label=T,repel=T,label.size=4)+NoLegend()
 
 ###########################
 #Projection of mouse gastruloids onto human gastruloid and embryo space
@@ -270,7 +267,7 @@ homologs <- intersect(row.names(obj_heoa_cs7_allG [['RNA']]@scale.data),row.name
 heoa_cs7_allG_emb <- t(obj_heoa_cs7_allG[['RNA']]@scale.data[homologs,]) %*% irlba_heoa_cs7_hG[homologs,]
 obj_heoa_cs7_allG [['pca']] <- CreateDimReducObject(embeddings = heoa_cs7_allG_emb , key = "PCA_", assay = DefaultAssay(obj_heoa_cs7_hG))
 options(repr.plot.width=6, repr.plot.height=6)
-#DimPlot(obj_heoa_cs7_allG  , group.by='day',pt.size=2.5,label=T,repel=T,label.size=3)+NoLegend()
+DimPlot(obj_heoa_cs7_allG  , group.by='day',pt.size=2.5,label=T,repel=T,label.size=3)+NoLegend()
 
 ###########################
 #PC2 alignment
@@ -281,7 +278,6 @@ obj_heoa_cs7_allG$Source=ifelse(obj_heoa_cs7_allG$day %in% c('CS7','CS12','CS13'
                                              'E8.5','E8.5b','E9.5','E10.5','E11.5','E12.5','E13.5'), 'Embryo','Gastruloids')
 df_pca2 <- obj_heoa_cs7_allG@meta.data
 df_pca2$PCA_2 <- data.frame(Embeddings(obj_heoa_cs7_allG,reduction='pca'))$PCA_2
-df_pca2$embryo_day <- ifelse(df_pca2$dataset %in% c('gastruloids','somitoids'),as.character(df_pca2$day),NA)
 df_pca2$day <- factor(df_pca2$day, level=c(  'E7','E7.25','E7.5','E7.75','E8','E8.25',
                                              'E8.5',
                                             'E8.5b','E9.5','E10.5',
@@ -297,7 +293,8 @@ df_pca2$day <- factor(df_pca2$day, level=c(  'E7','E7.25','E7.5','E7.75','E8','E
 df_mean = df_pca2%>%group_by(day)%>%summarise(mean_PC2=mean(-PCA_2))
 df_mean = df_mean%>%head(10)
 df_pca2 <- df_pca2[order(df_pca2$day),]
-options(repr.plot.width=10, repr.plot.height=6)
-ggplot(df_pca2,aes(x=-PCA_2,y=day,color=day,shape=Source))+geom_point(size=4)+theme_classic()+
+pdf('./staging.pdf',width=10,height=6)
+ggplot(subset(df_pca2,!is.na(day)),aes(x=-PCA_2,y=day,color=day,shape=Source))+geom_point(size=4)+theme_classic()+
 theme(text = element_text(size = 15))+ xlab('PC2 (Developmental time)')+
 geom_vline(xintercept = df_mean$mean_PC2,linetype="dotted")
+dev.off()
