@@ -1,0 +1,234 @@
+---
+title: "006_KO_gastruloid"
+author: "Nobuhiko Hamazaki"
+date: "7/27/2022"
+output: html_document
+---
+```{r}
+
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(stringr)
+library(RColorBrewer)
+library(tidyseurat)
+library(cowplot)
+library(viridis)
+library(ggthemes)
+
+set.seed(seed = 0)
+
+my_theme_feature <- theme(axis.text = element_blank(), axis.title = element_blank(), axis.line = element_blank(), axis.ticks = element_blank())
+```
+
+```{r}
+KO_merged_sub <- readRDS("10X_MERGED_hGas_KO_SCT_UMAP_harmony_sub.RDS")
+DimPlot(KO_merged_sub, label = T, reduction = "umap", shuffle = T, split.by = "orig.ident",  pt.size = 0.2 ) 
+  ggsave("hGas_KO_UMAP_original_cluster.jpg", width = 12, height = 6)
+```
+```{r}
+
+my_col <- rev(c("Red",
+"Red",
+"Orange",
+"#ffffbf",
+"#e0f3f8",
+"#91bfdb",
+"#4575b4"))
+
+
+FeaturePlot(KO_merged_sub, 
+            features = c( "SOX2", "PAX6", "ONECUT2", "FOXD3", "SOX10", "OSR1", "PAX8", "HAND1", "TNNT2", "TBX6", "RIPPLY1", "PAX3", "FST", "SHH", "CDX2", "FGF17", "HHEX", "SOX17"), 
+            pt.size = 0.5, ncol = 3,
+            min.cutoff = 0.25, order = T)  & theme(title = element_text(size =30),  axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank()) &
+  scale_color_gradientn(colours = my_col) 
+  ggsave("hGas_KO_markers.jpg", width = 14, height = 22)
+```
+
+```{r}
+   # RE-Labeling  
+  KO_merged_sub   <- RenameIdents(object = KO_merged_sub, 
+                           '0' = 'Cardiac myocyte',
+                           '2' = 'Cardiac myocyte',
+                           '11' = 'Cardiac myocyte',
+                           
+                           '1' = 'Cardiac meso.',
+                           '4' = 'Cardiac meso.',
+                           '7' = 'Cardiac meso.',
+                           '8' = 'Cardiac meso.',
+                           '13' = 'Cardiac meso.',
+                           '14' = 'Cardiac meso.',
+                           '23' = 'Cardiac meso.',
+                           
+                           '6' = 'Somite',
+                           '10' = 'Somite',
+                           '19' = 'Somite',
+                           '22' = 'Somite',
+                           
+                           '12' = 'Intermediate meso.',
+                           '18' = 'Intermediate meso.',
+                           
+                           '21' = 'Renal progenitor',
+                           
+                           '5' = 'Neural tube',
+                           '9' = 'Neural tube',
+                           '15' = 'Neural tube',
+                           '16' = 'Neural tube',
+
+                           '3' = 'Neural crest',
+                           
+                           '26' = 'Neural progenitor',
+                           
+                           '20' = 'Gut',
+                           '24' = 'Gut',
+               
+                           '17' = 'Caudal endoderm',
+                           
+                           '25' = 'Endothelium'
+      
+                           )
+```
+
+```{r}
+p1 <- 
+ DimPlot(KO_merged_sub, label = T, reduction = "umap", shuffle = T, group.by = "orig.ident", pt.size = 0.2, label.size = 0)  + scale_color_manual(values = c("darkred", "#21908CFF", "goldenrod1"))
+  
+
+p2 <-  DimPlot(KO_merged_sub, label = T, reduction = "umap", shuffle = T, split.by = "orig.ident",  pt.size = 0.2, label.size = 0)   
+
+
+cowplot::plot_grid(p1, p2, ncol = 2, rel_widths = c(1, 2.3))
+  ggsave("hGas_KO_UMAP_renamed_cluster.jpg", width = 20, height = 5)
+```
+
+
+```{r}
+df <- as.data.frame(KO_merged_sub$seurat_clusters)
+
+a <- subset(KO_merged_sub, orig.ident == "NTC" & replicate == "rep1")
+b <- subset(KO_merged_sub, orig.ident == "NTC" & replicate == "rep2")
+c <- subset(KO_merged_sub, orig.ident == "KO_PAX3" & replicate == "rep1")
+d <- subset(KO_merged_sub, orig.ident == "KO_PAX3" & replicate == "rep2")
+e <- subset(KO_merged_sub, orig.ident == "KO_TBX6" & replicate == "rep1")
+f <- subset(KO_merged_sub, orig.ident == "KO_TBX6" & replicate == "rep2")
+  
+df <- tibble(cell_type = names(table(a@active.ident)),
+  NTC_1 = table(a@active.ident), 
+  NTC_2 = table(b@active.ident),
+  KO_PAX3_1 = table(c@active.ident),
+  KO_PAX3_2 = table(d@active.ident),
+  KO_TBX6_1 = table(e@active.ident),
+  KO_TBX6_2 = table(f@active.ident)
+)
+
+df
+```
+
+
+
+```{r}
+# reordering levels for dot plot
+ df$cell_type <- factor(df$cell_type, levels = c('Neural tube', 'Neural crest', 'Neural progenitor', 'Somite', 'Cardiac meso.',  'Cardiac myocyte', 'Intermediate meso.', 'Renal progenitor',  'Gut', 'Caudal endoderm', 'Endothelium'))
+
+
+# converting table to long_format
+long_df <- df %>%
+  pivot_longer(cols = !cell_type, names_to = "Genotype", values_to = "Count") 
+
+# reordering levels for dot plot
+long_df$Genotype <- factor(long_df$Genotype, levels = c('NTC_1', 'NTC_2','KO_PAX3_1','KO_PAX3_2' ,'KO_TBX6_1','KO_TBX6_2'))
+ 
+
+
+  ggplot(long_df, aes(x=cell_type, y=log10(Count), colour = Genotype)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_manual(values = c(rep("black", 2) ,rep("orange", 2) ,rep("blue", 2) )) + 
+    theme_cowplot()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), axis.title.x = element_blank()
+  )
+  ggsave("hGas_KO_cell_count.pdf", width = 8, height = 4)
+
+
+
+
+
+```
+
+
+```{r}
+
+df_ratio <- tibble(cell_type = names(table(a@active.ident)),
+                   KO_PAX3_1 = df$KO_PAX3_1 / df$NTC_2,
+                   KO_PAX3_2 = df$KO_PAX3_2 / df$NTC_1,
+                   KO_TBX6_1 = df$KO_TBX6_1 / df$NTC_2,
+                   KO_TBX6_2 = df$KO_TBX6_2 / df$NTC_1,
+       )
+
+# reordering levels for dot plot
+ df_ratio$cell_type <- factor(df_ratio$cell_type, levels = rev(c('Neural tube', 'Neural crest', 'Neural progenitor', 'Somite', 'Cardiac meso.',  'Cardiac myocyte', 'Intermediate meso.', 'Renal progenitor',  'Gut', 'Caudal endoderm', 'Endothelium')))
+ 
+
+df_ratio %>%
+  pivot_longer(!cell_type, names_to = "Genotype", values_to = "Ratio") %>%
+  ggplot(aes(x=cell_type, y=log2(Ratio), colour = Genotype)) +
+  geom_point(size = 6, alpha = 0.7) + 
+  geom_abline(slope = 0, intercept = 0) + 
+  ylim(c(-5.3,2.6))+
+  scale_color_manual(values = c(rep("#21908CFF",2), rep("orange",2))) + 
+  theme_cowplot(font_size = 20)+
+  theme(axis.title.y = element_blank()
+  ) + 
+  coord_flip() 
+ggsave("hGas_KO__cell_ratio.pdf", width = 10, height = 4)
+
+```
+
+
+
+#Subclustering of neural cluster
+```{r}
+
+neural_sub <- subset(x= KO_merged_sub, idents =c("Neural tube", "Neural crest", "Neural progenitor"), orig.ident !="KO_TBX6")
+neural_sub <- RunPCA(neural_sub)
+neural_sub <- RunUMAP(neural_sub, dims = 1:30, verbose = FALSE)
+neural_sub <- FindNeighbors(neural_sub, dims = 1:30, verbose = FALSE)
+neural_sub <- FindClusters(neural_sub, verbose = FALSE, resolution = 1)
+
+
+ DimPlot(neural_sub, reduction = "umap", label = F,  group.by = "orig.ident", pt.size =1)  +
+    scale_color_manual(values = c("darkred", "#21908CFF")) + 
+   coord_flip() #"#440154FF" "#21908CFF" "#FDE725FF"
+ 
+  ggsave("hGas_KO_neural_subc_umap.pdf", width = 5, height = 4)
+  
+  FeaturePlot(neural_sub, features = c("FOXD3","SOX9", "SOX10"), pt.size = 1, ncol=3) &
+  scale_color_gradientn(colours = my_col) & 
+    my_theme_feature & 
+    coord_flip()
+    ggsave("hGas_KO_neural_subc_NC_marker.pdf", width = 12, height = 4)
+
+  
+  FeaturePlot(neural_sub, features = c("PAX6","SOX1","ONECUT1"), split.by = "orig.ident", ) + coord_flip()
+  
+  
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

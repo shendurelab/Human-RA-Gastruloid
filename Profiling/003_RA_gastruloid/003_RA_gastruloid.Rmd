@@ -1,0 +1,114 @@
+---
+title: "003_RA_gastruloid"
+author: "Nobuhiko Hamazaki"
+date: "7/15/2022"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(stringr)
+library(RColorBrewer)
+library(tidyseurat)
+library(cowplot)
+library(Signac)
+library(viridis)
+library(ggthemes)
+library(networkD3)
+
+set.seed(seed = 0)
+```
+
+
+# UMAP
+```{r}
+# Loading RDS
+
+RA_hGas_96h <- readRDS(file ="../Data/RA_hGas_96h.RDS")
+RA_hGas_120h <- readRDS(file = "../Data/RA_hGas_120h.RDS")
+hGas_96h <- readRDS(file = "../Data/hGas_96h.RDS")
+
+levels(hGas_96h)
+
+levels(RA_hGas_96h)
+# Assigning colors to each clusters
+# this enables large number color generation from brewer.pal
+getcol <- colorRampPalette(brewer.pal(n = 15, name = "Spectral"))
+# Making Color table
+
+color_table <- tibble(
+  Celltype = c( "Neural tube", "IM meso./Renal progenitor", "Renal epithelium", "Myocyte", "Neural crest","Gut", "NMP", "Notochord-like", "PSM", "Differentiation front","Somite", "Advanced Meso.", "Cardiac meso.", "Cardiomyocyte", "Neural progenitor", "Endothelium"),
+  Color = getcol(16))
+
+#Re-ordering factors
+RA_hGas_96h@active.ident <- factor(RA_hGas_96h@active.ident, levels = color_table$Celltype)
+RA_hGas_120h@active.ident <- factor(RA_hGas_120h@active.ident, levels = color_table$Celltype)
+hGas_96h@active.ident <- factor(hGas_96h@active.ident, levels = color_table$Celltype)
+
+
+p1 <- DimPlot(RA_hGas_96h, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("RA 96 hrs") + theme(plot.title = element_text(hjust = 0.5))
+p2 <- DimPlot(RA_hGas_120h, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("RA 120 hrs") + theme(plot.title = element_text(hjust = 0.5))
+p3 <- DimPlot(hGas_96h, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("no-RA 96 hrs") + theme(plot.title = element_text(hjust = 0.5))
+
+
+cowplot::plot_grid(p1, p2, p3, ncol = 3)
+ggsave("RA_UMAPs_spectral.jpg", width = 16, height = 5)
+```
+
+
+
+# Dotplot
+```{r}
+# RA_hGas_96h
+RA_hGas_96h <- readRDS("../Data/RA_hGas_96h.RDS")
+
+# reordering levels for dot plot
+  RA_hGas_96h@active.ident <- factor(RA_hGas_96h@active.ident, levels = rev(c('Neural tube', 'Neural crest', 'Neural progenitor', "Differentiation front", 'Somite', 'Cardiac meso.',  'IM meso./Renal progenitor', 'Renal epithelium', 'Gut' ))
+)
+
+  DotPlot(RA_hGas_96h, assay = "RNA", features = c("PAX6", "SOX10", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "ADGRL4", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 3, scale.max = 30, cols = c("white", "darkred")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), legend.position = "none") 
+  ggsave("RA_hGas_96h_dotplot.pdf", width = 7, height = 5)
+
+  
+  
+# RA_hGas_120h
+RA_hGas_120h <- readRDS("../Data/RA_hGas_120h.RDS")
+
+# reordering levels
+  RA_hGas_120h@active.ident <- factor(RA_hGas_120h@active.ident, levels = rev(c('Neural tube', 'Neural crest', 'Neural progenitor', "Differentiation front", 'Somite','Myocyte', 'Cardiac meso.', 'Cardiomyocyte', 'IM meso./Renal progenitor', 'Renal epithelium', 'Endothelium', 'Gut' ))
+)
+
+  DotPlot(RA_hGas_120h, assay = "RNA", features = c("PAX6", "SOX10", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "ADGRL4", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 30, cols = c("white", "darkred")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank()) 
+  
+  ggsave("RA_hGas_120h_dotplot.pdf", width = 9, height = 5)
+  
+
+  
+# hGas_96h
+  hGas_96h <- readRDS( file ="../Data/hGas_96h.RDS")
+levels(hGas_96h@active.ident)
+
+# reordering levels for dot plot
+hGas_96h@active.ident <- factor(hGas_96h@active.ident, levels = rev(c('NMP',  "PSM", "Differentiation front", 'Somite', 'Advanced Meso.', 'Advanced meso.',  'Cardiomyocyte', 'Notochord-like', 'Gut' ))
+)
+
+# Marker gene dot plot
+  DotPlot(hGas_96h, assay = "RNA", features = c("PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "ADGRL4", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 3, scale.max = 30, cols = c("white", "darkred")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), legend.position = "none") 
+  
+  ggsave("hGas_96h_ccr_annotated_dotplot.pdf", width = 6.5, height = 5)
+
+```
+
+
+
+
+

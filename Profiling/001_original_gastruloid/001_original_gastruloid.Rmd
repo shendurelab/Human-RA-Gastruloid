@@ -1,0 +1,169 @@
+---
+title: "001_original_gastruloid"
+author: "Nobuhiko Hamazaki"
+date: "7/15/2022"
+output: html_document
+---
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(stringr)
+library(RColorBrewer)
+library(tidyseurat)
+library(cowplot)
+library(Signac)
+library(viridis)
+library(ggthemes)
+library(networkD3)
+
+set.seed(seed = 0)
+```
+
+```{r}
+# Loading RDS
+hGas_time <- readRDS(file ="../Data/hGastruloid_timecourse.RDS")
+hGas_24h <- readRDS(file ="../Data/hGas_24h.RDS")
+hGas_48h <- readRDS(file ="../Data/hGas_48h.RDS")
+hGas_72h <- readRDS(file ="../Data/hGas_72h.RDS")
+hGas_96h <- readRDS(file ="../Data/hGas_96h.RDS")
+mGas <- readRDS(file = "../Data/mGastruloids_120h.RDS")
+TLS_120h <- readRDS(file ="../Data/TLS_120h.RDS")
+
+
+
+# Assigning colors to each clusters
+# this enables large number color generation from brewer.pal
+getcol <- colorRampPalette(brewer.pal(n = 17, name = "Spectral"))
+# Making Color table
+
+color_table <- tibble(
+  Celltype = c( "Neural tube", "Allantois", "PGCLC",  "Endothelium", "DE", "Gut", "NMP", "Emergent Meso.", "PS-like","Notochord-like", "PSM", "Differentiation front",  "Nascent Meso.","Somite", "Advanced Meso.", "Cardiac meso.", "Cardiomyocyte"),
+  Color = getcol(17))
+
+#Re-ordering factors
+hGas_time@active.ident <- factor(hGas_time@active.ident, levels = color_table$Celltype)
+hGas_24h@active.ident <- factor(hGas_24h@active.ident, levels = color_table$Celltype)
+hGas_48h@active.ident <- factor(hGas_48h@active.ident, levels = color_table$Celltype)
+hGas_72h@active.ident <- factor(hGas_72h@active.ident, levels = color_table$Celltype)
+hGas_96h@active.ident <- factor(hGas_96h@active.ident, levels = color_table$Celltype)
+mGas@active.ident <- factor(mGas@active.ident, levels = color_table$Celltype)
+TLS_120h@active.ident <- factor(TLS_120h@active.ident, levels = color_table$Celltype)
+p1 <- DimPlot(hGas_time, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("24-96h Human Gastruloid") + theme(plot.title = element_text(hjust = 0.5))
+p2 <- DimPlot(hGas_24h, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("24h Human Gastruloid") + theme(plot.title = element_text(hjust = 0.5))
+p3 <- DimPlot(hGas_48h, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("48h Human Gastruloid") + theme(plot.title = element_text(hjust = 0.5))
+p4 <- DimPlot(hGas_72h, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("72h Human Gastruloid") + theme(plot.title = element_text(hjust = 0.5))
+p5 <- DimPlot(hGas_96h, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("96h Human Gastruloid") + theme(plot.title = element_text(hjust = 0.5))
+p6 <- DimPlot(mGas, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F) + ggtitle("120h Mouse Gastruloid") + theme(plot.title = element_text(hjust = 0.5))
+p7 <- DimPlot(TLS_120h, label = T, shuffle = T, repel = T) + NoLegend() + scale_color_manual(values = color_table$Color, drop = F)+ ggtitle("120h Mouse TLS") + theme(plot.title = element_text(hjust = 0.5))
+
+cowplot::plot_grid(p1, p2, p3, p4, p5, p6, p7)
+ggsave("UMAPs_spectral.jpg", width = 12, height = 12)
+
+```
+
+
+
+# extracting PSM and NMP in original gastruloid
+```{r}
+hGas_96h <- readRDS(file ="../Data/hGas_96h.RDS")
+
+# Extracting Neural lineages and somite lineage
+hGas_96h_sub <- subset(hGas_96h, idents = c("NMP", "PSM"))
+
+# NT genes on subtracted cells
+patchwork::wrap_plots(lapply(c("TBXT", "SOX2", "NKX1-2"), function(x) {FeaturePlot(hGas_96h_sub, features=x, min.cutoff = 0.45, order = T, cols = c("lightgrey","darkorange"), max.cutoff = 1, combine = TRUE) +
+      labs(title=x)  +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) }))
+  ggsave("Subtracted_PSM_neu_hGas_96h_NMP_markers.jpg", width = 9, height = 3) 
+  
+  patchwork::wrap_plots(lapply(c("IRX3", "SOX1", "PAX6" ), function(x) {FeaturePlot(hGas_96h_sub, features=x, min.cutoff = 0.45, order = T, cols = c("lightgrey","darkcyan"),  max.cutoff = 2, combine = TRUE) +
+      labs(title=x)  +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) }))
+ggsave("Subtracted_PSM_neu_hGas_96h_NeuralTube_markers.jpg", width = 9, height = 3) 
+
+
+# NT genes on subtracted cells
+  patchwork::wrap_plots(lapply(c("TBX6","MESP2", "RIPPLY2"), function(x) {FeaturePlot(hGas_96h_sub, features=x, min.cutoff = 0.45, order = T, cols = c("lightgrey","purple"), max.cutoff = 1, combine = TRUE) +
+      labs(title=x)  +
+     # ylim(-2, 1.5)  +
+     # xlim(-9, -4.5) +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) }))
+  ggsave("Subtracted_PSM_neu_hGas_96h_PSM_markers.jpg", width = 9, height = 3) 
+  
+  
+
+```
+
+
+# extracting PSM and NMP in mouse gastruloid
+```{r}
+mGas <- readRDS(file = "../Data/mGastruloids_120h.RDS")
+
+  # Extracting Neural lineages and PSM
+Idents(mGas) <-   mGas$VDB_celltype
+mGas_sub <- subset(mGas, idents = c("NMP", "Neural cells", "PSM"))
+
+# NT genes on subtracted cells
+  patchwork::wrap_plots(lapply(c("T","Sox2", "Nkx1-2"), function(x) {FeaturePlot(mGas_sub, features=x, min.cutoff = 0.45, order = T, cols = c("lightgrey","darkorange"),  combine = TRUE) +
+      labs(title=x)  +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) 
+    }))
+  ggsave("Subtracted_neu_PSM_mGas_NMP_markers.jpg", width = 9, height = 3) 
+  
+  patchwork::wrap_plots(lapply(c("Irx3", "Sox1", "Pax6" ), function(x) {FeaturePlot(mGas_sub, features=x, min.cutoff = 0.45, max.cutoff = 2, order = T, cols = c("lightgrey","darkcyan"),  combine = TRUE) +
+      labs(title=x)  +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) }))
+ggsave("Subtracted_neu_PSM_mGas_NeuralTube_markers.jpg", width = 9, height = 3) 
+
+patchwork::wrap_plots(lapply(c("Tbx6","Mesp2", "Ripply2" ), function(x) {FeaturePlot(mGas_sub, features=x, min.cutoff = 0.45, max.cutoff = 2, order = T, cols = c("lightgrey","purple"),  combine = TRUE) +
+      labs(title=x)  +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) }))
+ggsave("Subtracted_neu_PSM_mGas_PSM_markers.jpg", width = 9, height = 3) 
+  
+```
+
+
+# extracting PSM and NMP from TLS
+```{r}
+TLS <- readRDS(file ="../Data/TLS_120h.RDS")
+
+# RE-Labeling  
+Idents(TLS) <-   TLS$cell_state
+TLS   <- RenameIdents(object = TLS, 
+                           'aPSM' = 'PSM',
+                           'Endoderm' = 'Gut',
+                           'Endothelial' = 'Endothelium',
+                           'NeuralTube1' = 'Neural tube', 
+                           'NeuralTube2' = 'Neural tube',
+                           'NMPs' = 'NMP',
+                           'pPSM' = 'PSM',
+                           'Somite' = 'Somite',
+                           'Somite-1' = 'Differentiation front',
+                           'Somite0' = 'Somite',
+                           'SomiteDermo' = 'Somite',
+                           'SomiteSclero' = 'Somite',
+                      "PCGLC" = "PGCLC"
+                           )
+
+  
+  # Extracting Neural lineages
+TLS_sub <- subset(TLS, idents = c("NMP", "Neural tube", "PSM"))
+
+# NT genes on subtracted cells
+  patchwork::wrap_plots(lapply(c("T", "Sox2", "Nkx1-2"), function(x) {FeaturePlot(TLS_sub, features=x, min.cutoff = 0.45, order = T, cols = c("lightgrey","darkorange"),  combine = TRUE) + labs(title=x) +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) }))
+  ggsave("Subtracted_neu_PSM_TLS_NMP_markers.jpg", width = 9, height = 3) 
+  
+  patchwork::wrap_plots(lapply(c("Irx3", "Sox1", "Pax6" ), function(x) {FeaturePlot(TLS_sub, features=x, min.cutoff = 0.45, max.cutoff = 2, order = T, cols = c("lightgrey","darkcyan"),  combine = TRUE) + labs(title=x) +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) }))
+ggsave("Subtracted_neu_PSM_TLS_NeuralTube_markers.jpg", width = 9, height = 3) 
+  
+
+patchwork::wrap_plots(lapply(c("Tbx6","Mesp2", "Ripply2" ), function(x) {FeaturePlot(TLS_sub, features=x, min.cutoff = 0.45, max.cutoff = 2, order = T, cols = c("lightgrey","purple"),  combine = TRUE) +
+      labs(title=x)  +
+      theme(axis.title = element_blank(), axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank()) }))
+ggsave("Subtracted_neu_PSM_TLS_PSM_markers.jpg", width = 9, height = 3) 
+  
+```

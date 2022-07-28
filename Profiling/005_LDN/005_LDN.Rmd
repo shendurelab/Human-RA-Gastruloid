@@ -1,0 +1,228 @@
+---
+title: "005_LDN"
+author: "Nobuhiko Hamazaki"
+date: "7/15/2022"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(stringr)
+library(RColorBrewer)
+library(tidyseurat)
+library(cowplot)
+library(Signac)
+library(viridis)
+library(ggthemes)
+library(networkD3)
+
+set.seed(seed = 0)
+```
+
+
+```{r}
+RA_LDN <- readRDS("../Data/RA_LDN.RDS")
+ 
+DimPlot(RA_LDN, repel = T)  
+ggsave("UMAP_RA_LDN.pdf", width = 8, height = 5)
+
+
+
+# 'Myocyte','Cardiomyocyte', 'Endothelium', 'IMM', 'Neural crest', 'Roof plate'were not detected
+# reordering levels for dot plot
+  RA_LDN@active.ident <- factor(RA_LDN@active.ident, levels = rev(c("NMP", 'Neural tube',  'Neural progenitor', "PSM", "Differentiation front", 'Somite', "Notochord", "Endothelium", "Unknown"))
+)
+
+  DotPlot(RA_LDN, assay = "RNA", features = c("PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "LHX1", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 3, scale.max = 30, cols = c("white", "darkred")
+    ) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        panel.grid.major = element_line(colour = "lightgrey", size = 0.1),
+        panel.border  = element_rect(),
+        axis.title = element_blank()) 
+  
+  ggsave("RA_LDN_ccr_annotated_dotplot.pdf", width = 9, height = 5)
+  
+  
+
+```
+
+
+# timecourse + RA + RA_LDN
+
+```{r}
+WT_LDN_Merged_H_umap <- readRDS("../Data/LDN_WT_merged.RDS")
+  
+my_col <- rev(c("Red",
+"Red",
+"Orange",
+"#ffffbf",
+"#e0f3f8",
+"#91bfdb",
+"#4575b4"))
+
+FeaturePlot(WT_LDN_Merged_H_umap, 
+            features = c("NKX1-2", "SOX2",  "TBXT",  # Neural cell? 
+                         "SOX1", "PAX6", "IRX3", # Neural Tube
+                         "FOXD3", "SOX9", "SOX10", # Neural crest
+                        "TUBB3", "ONECUT2","POU3F1", # Neuron
+                         "PAX2","PAX8","TNNT2", # IMM/RE/Heart
+                        "ID1",  "ID3", "ID4", # ID
+                        "BMP4", "BMP5", "BMP7" # BMP
+           ), 
+            pt.size = 0.5, ncol = 3,
+            min.cutoff = 0.25, order = T) &
+  my_theme_feature &
+  scale_color_gradientn(colours = my_col) 
+ggsave("hGas_RA120h_WT_LDN_harmony_markers2.jpg", width = 10, height = 20)
+
+
+DimPlot(object = WT_LDN_Merged_H_umap, label = T, reduction = "umap", pt.size = 0.2,  shuffle = T) 
+
+# RE-Labeling  
+WT_LDN_Merged_H_umap   <- RenameIdents(object = WT_LDN_Merged_H_umap, 
+                           '0' = 'NMP',
+                           '1' = 'Neural tube',
+                           '2' = 'Somite',
+                           '3' = 'Somite', 
+                           '4' = 'Heart',
+                           '5' = 'Somite',
+                           '6' = 'Neural crest',
+                           '7' = 'Somite',
+                           '8' = 'IMM/RE',
+                           '9' = 'Neural tube',
+                           '10' = 'Differentiation front',
+                           '11' = 'Unknown',
+                           '12' = 'Myocyte',
+                           '13' = 'Neural progenitor',
+                           '14' = 'Endothelium',
+                           '15' = 'Notochord/Endoderm'
+                         )
+
+
+WT_LDN_Merged_H_umap$celltype <- WT_LDN_Merged_H_umap@active.ident
+
+ DimPlot(object = WT_LDN_Merged_H_umap, label = F, reduction = "umap", pt.size = 0.2,  shuffle = T)
+ ggsave("hGas_RA120h_WT_LDN_harmony_anno_dimplot.jpg", width = 8, height = 6)
+
+
+# violin plot for ID and BMP GENEs
+VlnPlot(WT_LDN_Merged_H_umap, features = c("ID1", "ID2", "ID3", "ID4", "BMP2", "BMP4", "BMP5", "BMP7"), sort = T, ncol = 4) &
+  my_theme_violin
+ggsave("hGas_RA120h_WT_LDN_harmony_ID_BMP_violin.jpg", width = 10, height = 6)
+ 
+ 
+
+saveRDS(WT_LDN_Merged_H_umap, "../Data/WT_LDN_Merged_H_umap.RDS")
+# 
+```
+
+
+
+
+# Showing ratio changes in LDN
+```{r}
+WT_LDN_Merged_H_umap <- readRDS("../Data/WT_LDN_Merged_H_umap.RDS")
+  
+df <- as.data.frame(WT_LDN_Merged_H_umap@active.ident)
+
+a <- subset(WT_LDN_Merged_H_umap, orig.ident == "RA_hGas_120h")
+b <- subset(WT_LDN_Merged_H_umap, orig.ident == "RA_LDN")
+
+df <- tibble(cell_type = names(table(a@active.ident)),
+  Control = table(a@active.ident), 
+  LDN_treated = table(b@active.ident)
+)
+
+
+# reordering levels for dot plot
+ df$cell_type <- factor(df$cell_type, levels = c('NMP','Neural tube', 'Neural crest', 'Neural progenitor', 'Differentiation front','Somite', 'Myocyte', 'Heart',  'IMM/RE',   'Notochord/Endoderm', 'Endothelium', 'Notochord', "Unknown"))
+ 
+
+# converting table to long_format
+long_df <- df %>%
+  pivot_longer(cols = !cell_type, names_to = "Treatment", values_to = "Count") 
+
+# reordering levels for dot plot
+long_df$Treatment <- factor(long_df$Treatment, levels = c('Control', 'LDN_treated'))
+ 
+
+
+  ggplot(long_df, aes(x=cell_type, y=log10(Count), colour = Treatment)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_manual(values = c(rep("black", 2) ,rep("orange", 2) ,rep("blue", 2) )) + 
+    theme_cowplot()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), axis.title.x = element_blank()
+  )
+  ggsave("hGas_MERGED_harmony_LDN_cell_count_sub.pdf", width = 8, height = 4)
+  
+  
+  
+df_ratio <- tibble(cell_type = names(table(a@active.ident)),
+                   LDN = df$LDN_treated / df$Control
+       )
+
+# reordering levels for dot plot
+ df_ratio$cell_type <- factor(df_ratio$cell_type, levels = rev(c('NMP','Neural tube', 'Neural crest', 'Neural progenitor', 'Differentiation front','Somite', 'Myocyte', 'Heart',  'IMM/RE',   'Notochord/Endoderm', 'Endothelium', 'Notochord', "Unknown")))
+ 
+
+df_ratio %>%
+  pivot_longer(!cell_type, names_to = "Treatment", values_to = "Ratio") %>%
+  ggplot(aes(x=cell_type, y=log2(Ratio), colour = Treatment)) +
+  geom_point(size = 6, alpha = 0.7) + 
+  geom_abline(slope = 0, intercept = 0) + 
+  scale_color_manual(values = c(rep("#21908CFF",2), rep("orange",2))) + 
+  theme_cowplot(font_size = 20)+
+  theme(axis.title.y = element_blank()
+  ) + 
+  coord_flip() 
+ggsave("hGas_MERGED_harmony_LDN_cell_ratio_sub.pdf", width = 10, height = 4)
+
+
+```
+
+
+```{r}
+set.seed(seed = 0)
+gastime_LDN_Merged <- readRDS("~/Dropbox/Document/Analysis/gastruloid/Data/10X_hGas_time_RA_LDN_merge_SCTransformed_rcc.RDS")
+
+# Harmony
+gastime_LDN_Merged_H <- RunPCA(gastime_LDN_Merged, assay = "SCT", verbose = FALSE)
+gastime_LDN_Merged_H <- RunHarmony(object = gastime_LDN_Merged_H, group.by.vars = "orig.ident", plot_convergence = TRUE, assay.use = "SCT",theta = 0.5)
+
+# Running UMAP using harmony corrected PCs
+gastime_LDN_Merged_H_umap <- RunUMAP(gastime_LDN_Merged_H, reduction = "harmony", dims = 1:30, spread = 1, min.dist = 0.5) %>% 
+    FindNeighbors(reduction = "harmony", dims = 1:30) %>% 
+    FindClusters(resolution = 0.7) %>% 
+    identity()
+
+DimPlot(object = gastime_LDN_Merged_H_umap, reduction = "umap", pt.size = 0.2, group.by = "orig.ident", shuffle = T) 
+    ggsave("hGas_RA_gastime_LDN_Merged_harmony_UMAP_original_cells.jpg", width = 8, height = 6)
+    
+    DimPlot(object = gastime_LDN_Merged_H_umap, reduction = "umap", pt.size = 0.1, group.by = "orig.ident", shuffle = T, split.by = "orig.ident", ncol = 3) 
+    ggsave("hGas_RA_gastime_LDN_Merged_harmony_UMAP_original_cells_origident.jpg", width = 10, height = 6)
+    ```
+
+
+
+
+```{r}
+
+  DotPlot(RA_LDN, assay = "RNA", features = c("PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "LHX1", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 30, cols = c("white", "darkred")
+    ) + 
+    theme(panel.background = element_blank(),
+          strip.background = element_blank(),
+          axis.title = element_blank(),
+          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+          panel.grid.major.x = element_blank()) 
+  
+  ggsave("RA_LDN_hGas_120h_dotplot.pdf", width = 9, height = 5)
+
+
+```
+
+
+
+
