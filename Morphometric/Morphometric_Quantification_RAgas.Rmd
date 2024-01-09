@@ -1,0 +1,719 @@
+---
+title: "Morphometric_Quantification_RAgas"
+output: html_document
+date: "2024-01-02"
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(cowplot)
+library(tidyr)
+library(reshape2)
+library(viridis)
+library(scico)
+library(RColorBrewer)
+
+
+
+# Theme setting
+my_theme <- theme_bw(base_size = 12, base_family = "") + 
+  theme(panel.background = element_blank(),
+                  strip.background = element_blank(),
+                  axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, color = "black"),
+                  panel.grid.major.x = element_blank(),
+        text = element_text(color = "black")) 
+                  
+  
+```
+
+
+# plot for whole properties
+```{r}
+My_col <- c("#778899", "#233B6C", "#DDA0DD", "#F8B400",  "#00BFFF","#3CB371")
+My_order <- c("NT_NT", "NT_Mat", "NT_MatRA", "RA_NT", "RA_Mat", "RA_MatRA")
+
+#Loading data
+whole <- read_excel("Quantification_gastruloid_whole2.xlsx")
+
+whole2 <- whole %>% filter(Cell_number == 4000) %>% mutate(condition = paste(cond0_24h,cond48_120h, sep = "_"))
+
+whole2$condition <- factor(whole2$condition, levels = My_order)
+
+
+# Whole length
+p1 <- 
+  ggplot(whole2, aes(x=Time, y = Whole_length, colour = condition, fill = condition,group = condition)) +
+  geom_smooth(aes(), alpha = 0.2, method = "loess", span = 2) +
+  geom_jitter(width = 1) +
+   scale_x_continuous(breaks = seq(0, 120, by = 24)) +
+  ylim(c(0,2000)) +
+  my_theme +
+  scale_color_manual(values =  My_col)+
+  scale_fill_manual(values =  My_col) 
+  
+  
+
+# Average width
+p2 <- 
+ ggplot(whole2, aes(x=Time, y = Average_width, colour = condition, fill = condition,group = condition)) +
+  geom_smooth(aes(), alpha = 0.2, method = "loess", span = 2) +
+  geom_jitter(width = 1) +
+   scale_x_continuous(breaks = seq(0, 120, by = 24)) +
+  ylim(c(0,900)) +
+  my_theme +
+  scale_color_manual(values =  My_col)+
+  scale_fill_manual(values =  My_col)
+
+
+# Width_Length ratio
+p3 <- 
+ ggplot(whole2, aes(x=Time, y = L_per_W, colour = condition, fill = condition,group = condition)) +
+  geom_smooth(aes(), alpha = 0.2, method = "loess", span = 2) +
+  geom_jitter(width = 1) +
+   scale_x_continuous(breaks = seq(0, 120, by = 24)) +
+  ylim(c(0,8)) +
+  my_theme +
+  scale_color_manual(values =  My_col)+
+  scale_fill_manual(values =  My_col)
+
+
+
+
+# Neural.length_per_Whole.length
+whole3 <- whole2 %>% filter(NT_Wh_ratio != "NA")
+whole3$NT_Wh_ratio <- as.numeric(whole3$NT_Wh_ratio)
+
+p4 <- 
+  ggplot(whole3, aes(x=Time, y = NT_Wh_ratio, colour = condition, fill = condition, group = condition)) +
+  geom_smooth(aes(), alpha = 0.2, method = "loess", span = 2) +
+  geom_jitter(width = 1) +
+   scale_x_continuous(breaks = seq(0, 120, by = 24)) +
+  ylim(c(0,100)) +
+  my_theme +
+  scale_color_manual(values =  My_col) +
+  scale_fill_manual(values =  My_col)
+
+
+# Average_NT_width
+whole3 <- whole2 %>% filter(Average_NT_width != "NA")
+whole3$Average_NT_width <- as.numeric(whole3$Average_NT_width)
+
+p5 <- 
+  ggplot(whole3, aes(x=Time, y = Average_NT_width, colour = condition, fill = condition, group = condition)) +
+  geom_smooth(aes(), alpha = 0.2, method = "loess", span = 2) +
+  geom_jitter(width = 1) +
+  scale_x_continuous(breaks = seq(0, 120, by = 24)) +
+  ylim(c(0, 400)) +
+  my_theme +
+  scale_color_manual(values =  c("#00BFFF","#3CB371","#778899", "#233B6C", "#F8B400",  "#DDA0DD")) +
+  scale_fill_manual(values =  c("#00BFFF","#3CB371","#778899", "#233B6C", "#F8B400",  "#DDA0DD"))
+
+
+# NTlength_NTwidth
+whole3 <- whole2 %>% filter(NTlength_NTwidth != "NA")
+whole3$NTlength_NTwidth <- as.numeric(whole3$NTlength_NTwidth)
+
+
+
+p6 <- 
+  ggplot(whole3, aes(x=Time, y = NTlength_NTwidth, colour = condition, fill = condition, group = condition)) +
+  geom_smooth(aes(), alpha = 0.2, method = "loess", span = 2) +
+  geom_jitter(width = 1) +
+  scale_x_continuous(breaks = seq(0, 120, by = 24)) +
+  ylim(c(0, 12)) +
+  my_theme +
+  scale_color_manual(values =  c("#00BFFF","#3CB371","#778899", "#233B6C", "#F8B400",  "#DDA0DD")) +
+  scale_fill_manual(values =  c("#00BFFF","#3CB371","#778899", "#233B6C", "#F8B400",  "#DDA0DD"))
+    
+p_merge <-  cowplot::plot_grid(p1,p2,p3, p4,p5,p6,ncol = 3) 
+
+# save plot
+save_plot(plot = p_merge, filename = "Whole_property.pdf", base_height = 8, base_width = 14 )
+
+
+
+
+
+
+# NT width
+p1 <- ggplot(whole2, aes(x=Time, y = NT_Width_post, group = Time)) +
+  geom_boxplot()+ geom_point() +
+  ylim(c(0,400)) +
+  my_theme +
+  scale_color_manual(values =  My_col)
+
+p2 <- ggplot(whole2, aes(x=Time, y = NT_Width_center, group = Time)) +
+  geom_boxplot()+ geom_point() +
+  ylim(c(0,400)) +
+  my_theme +
+  scale_color_manual(values =  My_col)
+
+p3 <- ggplot(whole2, aes(x=Time, y = NT_Width_anterior, group = Time)) + 
+  ylim(c(0,400)) +
+  geom_boxplot()+ geom_point() +
+  my_theme +
+  scale_color_manual(values =  My_col)
+
+p_NT_width <-  cowplot::plot_grid(p1,p2,p3, ncol = 3) 
+p_NT_width
+# save plot
+save_plot(plot = p_NT_width, filename = "NT_width.pdf", base_height = 4, base_width = 7 )
+
+
+
+```
+
+# somite count
+```{r}
+
+My_col <- c("#778899", "#233B6C", "#DDA0DD", "#F8B400",  "#00BFFF","#3CB371")
+My_order <- c("NT_NT", "NT_Mat", "NT_MatRA", "RA_NT", "RA_Mat", "RA_MatRA")
+
+# Loading data
+whole <- read_excel("Quantification_gastruloid_whole2.xlsx")
+
+whole_s <- whole %>% filter(Cell_number == 4000) %>% filter(Time == 72 |  Time == 96 |  Time == 120) %>% mutate(condition = paste(cond0_24h,cond48_120h, sep = "_"))
+
+whole_s$Time <- as.factor(whole_s$Time)
+
+whole_s$condition <- factor(whole_s$condition, levels = My_order)
+
+
+# Somite count
+# Plot boxplot and jitter
+p_somite <- ggplot(whole_s, aes(x = Time, y = Somite_pair_count, fill = condition)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = condition), position = position_jitterdodge(jitter.width = 0.3, dodge.width = 0.8)) +
+  scale_y_continuous(limits = c(0,10), breaks = seq(0, 10, by = 1)) +
+  my_theme + 
+  theme(panel.grid.minor.y = element_blank(),
+        axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, color = "black")) + 
+  scale_fill_manual(values = My_col) +scale_color_manual(values = My_col)
+
+p_somite
+
+# save plot
+save_plot(plot = p_somite, filename = "Whole_somite_count.pdf", base_height = 4, base_width = 6 )
+
+
+```
+
+
+
+# somite bi-lateral
+```{r}
+
+My_col <- c("#2E8B57", "#778899" )
+My_order <- c("Paired", "Not_paired")
+
+# Loading data
+Lat_count <- read_excel("Quantification_Lateral.xlsx")
+
+Lat_count$somite_position <- factor(Lat_count$somite_position, levels = My_order)
+
+
+# Somite count
+# Plot 100% bar plot
+Lat_count %>% ggplot(aes(x = Treatment, y = Count, fill = somite_position)) +
+  geom_bar(stat = "identity", position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "", y = "Frequency") +
+  scale_fill_manual(values = My_col) +
+  my_theme + 
+  theme(panel.grid.minor.y = element_blank(),
+        axis.text.x = element_text(color = "black")
+        )
+
+ggsave("Somite_Lateral.pdf", height = 4, width = 3 )
+
+
+
+
+```
+
+
+# plot for each somite properties (WT)
+```{r}
+#Loading data
+somite <- read_excel("Quantification_somite.xlsx")
+
+
+# somite length 
+  
+  p1 <- somite %>%
+  dplyr::filter(Time == 120) %>%
+  ggplot(aes(x=Somite_position, y = Somite_length, group = Somite_position)) +
+  geom_boxplot(aes(fill = Somite_position))+ geom_point() +
+  ylim(c(0,200)) +
+  my_theme
+  
+  
+  # save plot
+save_plot(plot = p1, filename = "somite_length.pdf", base_height = 3, base_width = 6 )
+
+
+
+# somite width
+p2 <- somite %>%
+  dplyr::filter(Time == 120) %>%
+  ggplot(aes(x=Somite_position, y = Somite_width, group = Somite_position)) +
+  geom_boxplot(aes(fill = Somite_position))+ geom_point() + #facet_wrap(~Time)+
+  ylim(c(0,200)) +
+  my_theme
+
+save_plot(plot = p2, filename = "somite_width.pdf", base_height = 3, base_width = 6 )
+
+
+
+# somite area 
+p3 <- somite %>%
+  dplyr::filter(Time == 120) %>%
+  ggplot(aes(x=Somite_position, y = Somite_area, group = Somite_position)) +
+  geom_boxplot(aes(fill = Somite_position))+ geom_point() + # facet_wrap(~Time)+
+  #ylim(c(0,200)) +
+  my_theme
+save_plot(plot = p3, filename = "somite_area.pdf", base_height = 3, base_width = 6 )
+
+
+
+```
+
+
+
+# plot for each somite properties (LDN)
+```{r}
+#Loading data
+somite <- read_excel("Quantification_LDN_gastruloid.xlsx", sheet = 2)
+
+
+# somite length 
+  
+  p1 <- somite %>%
+  dplyr::filter(Time == 120) %>%
+  ggplot(aes(x=Somite_position, y = Somite_length, group = Somite_position)) +
+  geom_boxplot(aes(fill = Somite_position))+ geom_point() +
+  ylim(c(0,200)) +
+  my_theme + 
+  
+  
+  p1
+  
+  # save plot
+save_plot(plot = p1, filename = "LDN_somite_length.pdf", base_height = 3, base_width = 6 )
+
+
+
+# somite width
+p2 <- somite %>%
+  dplyr::filter(Time == 120) %>%
+  ggplot(aes(x=Somite_position, y = Somite_width, group = Somite_position)) +
+  geom_boxplot(aes(fill = Somite_position))+ geom_point() + #facet_wrap(~Time)+
+  ylim(c(0,200)) +
+  my_theme
+
+save_plot(plot = p2, filename = "LDN_somite_width.pdf", base_height = 3, base_width = 6 )
+
+
+
+# somite area 
+p3 <- somite %>%
+  dplyr::filter(Time == 120) %>%
+  ggplot(aes(x=Somite_position, y = Somite_area, group = Somite_position)) +
+  geom_boxplot(aes(fill = Somite_position))+ geom_point() + # facet_wrap(~Time)+
+  ylim(c(0,20000)) +
+  my_theme
+save_plot(plot = p3, filename = "LDN_somite_area.pdf", base_height = 3, base_width = 6 )
+
+ 
+
+```
+
+
+
+
+
+
+
+
+
+
+# TBX6 positive cells
+```{r}
+#Loading data
+T6 <- read_excel("Quantification_TBX6_24h_gastruloid.xlsx")
+
+# Setting x-axis order
+
+T6$Genotype <- factor(T6$Genotype, levels =  c("NTC", "KO_TBX6"))
+My_col <- c("#778899",  "#F8B400")
+
+
+  p1 <- 
+    T6 %>%
+  ggplot(aes(x=Genotype, y = ratio, group = Genotype)) +
+  geom_boxplot(aes(fill = Genotype))+ geom_point() +
+  ylim(c(0,100)) +
+    scale_fill_manual(values = My_col) +
+  ylab("TBX6 (%)") + 
+  xlab("") +
+  my_theme 
+
+
+  # save plot
+save_plot(plot = p1, filename = "TBX6_ratio_24h.pdf", base_height = 4, base_width = 4 )
+
+
+```
+
+
+# somite live imaging (Time course)
+```{r}
+sm <- read_excel("Somite_number_live_imaging.xlsx")
+
+msm <- melt(sm, key = Replicates, id.vars = "Replicates", variable.name = "Time", value.name = "Somite_number")
+
+msm$Time <- as.numeric(as.character(msm$Time))
+
+
+ggplot(msm, aes(x= Time, y = Somite_number, group = Replicates, colour = Replicates)) +
+  geom_line(position=position_dodge(width=0.5), size = 1, alpha = 0.5) +
+  theme_classic(base_size = 12, base_family = "") +
+  scale_color_discrete(type = "PuBu") +
+  theme(panel.background = element_blank(),
+                  strip.background = element_blank(),
+                  axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+                  panel.grid.major.x = element_blank())
+ggsave("somite_liveimaging.pdf", width = 6, height = 4)
+
+
+
+ggplot(msm, aes(x= Time, y = Somite_number, group = Replicates, colour = Replicates)) +
+  geom_line(position=position_dodge(width=0.5), size = 1, alpha = 0.5) +
+  theme_classic(base_size = 12, base_family = "") +
+  theme(panel.background = element_blank(),
+                  strip.background = element_blank(),
+                  axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+                  panel.grid.major.x = element_blank())
+
+scale_color_manual(values = color_table$Color, drop = F)
+```
+
+
+# somite live imaging (Interval)
+```{r}
+int <- read_excel("Somite_number_live_imaging.xlsx", sheet = "Interval")
+
+mint <- melt(int, key = Replicates, id.vars = "Replicates", variable.name = "Segments", value.name = "Interval")
+
+ggplot(mint, aes(x= Segments, y = Interval)) +geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(group = Replicates, colour = Replicates), alpha = 0.5) + 
+ # scale_color_viridis(discrete = T, option = "magma") +
+  
+  ylim(c(0,12))+
+  theme_classic(base_size = 12, base_family = "") +
+  theme(panel.background = element_blank(),
+                  strip.background = element_blank(),
+                  axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+                  panel.grid.major.x = element_blank())
+ggsave("somite_interval.pdf", width = 6, height = 4)
+
+
+```
+
+
+# LDN whole property
+```{r}
+ldn <- read_excel("Quantification_LDN_gastruloid.xlsx")
+
+# Reorder 
+ldn$Treatment <- factor(ldn$Treatment, levels = c("Control", "LDN"))
+ldn$Somite_pair_count <- as.integer(ldn$Somite_pair_count)
+
+# Color scheme
+my_col <- viridis(3, option = "B")[1:2]
+
+
+# Whole length
+p1 <- ggplot(ldn, aes(x=Treatment, y = Whole_length, group = Treatment, fill = Treatment)) +
+  geom_boxplot()+ geom_jitter(width = 0.1, height = 0) +
+  ylim(c(0,3000)) +
+  my_theme + theme(legend.position = "none", axis.title.x = element_blank()) +
+  scale_fill_manual(values = my_col) 
+
+p2 <- ggplot(ldn, aes(x=Treatment, y = NT_length, group = Treatment, fill = Treatment)) +
+  geom_boxplot()+ geom_jitter(width = 0.1, height = 0) +
+  ylim(c(0,2000)) +
+  my_theme + theme(legend.position = "none", axis.title.x = element_blank()) +
+  scale_fill_manual(values = my_col) 
+
+p3 <- ggplot(ldn, aes(x=Treatment, y = NT_Wh_ratio, group = Treatment, fill = Treatment)) + 
+  ylim(c(0,90)) +
+  geom_boxplot()+ geom_jitter(width = 0.1, height = 0) +
+  my_theme + theme(legend.position = "none", axis.title.x = element_blank()) +
+  scale_fill_manual(values = my_col) 
+
+
+p4 <- ggplot(ldn, aes(x=Treatment, y = Somite_pair_count, group = Treatment, fill = Treatment)) +
+  geom_boxplot()+  geom_jitter(width = 0.1, height = 0) +
+  scale_y_continuous(limits = c(0, 12), breaks = seq(0, 12, by = 2)) +
+  my_theme + theme(legend.position = "none", axis.title.x = element_blank(), ) +
+  scale_fill_manual(values = my_col) 
+
+p_merge <-  cowplot::plot_grid(p1,p2,p3,p4, ncol = 4) 
+
+# save plot
+save_plot(plot = p_merge, filename = "LDN_morphology.pdf", base_height = 4, base_width = 9 )
+
+
+
+
+# Tukey multiple comparison test
+aov(NT_length ~ Treatment, data = ldn) %>% TukeyHSD() 
+aov(Somite_pair_count ~ Treatment, data = ldn) %>% TukeyHSD()
+aov(Whole_length ~ Treatment, data = ldn) %>% TukeyHSD()
+aov(NT_Wh_ratio ~ Treatment, data = ldn) %>% TukeyHSD()
+viridis::scale_fill_viridis(discrete = T, option = "B") 
+
+```
+# CHIR whole property
+```{r}
+CHIR <- read_excel("Quantification_CHIR_gastruloid.xlsx")
+
+# Reorder 
+CHIR$Treatment <- factor(CHIR$Treatment, levels = c("Control", "CHIR"))
+CHIR$Somite_pair_count <- as.integer(CHIR$Somite_pair_count)
+
+# Color scheme
+my_col <- viridis(3, option = "B")[1:2]
+
+
+# Whole length
+p1 <- ggplot(CHIR, aes(x=Treatment, y = Whole_length, group = Treatment, fill = Treatment)) +
+  geom_boxplot(outlier.shape = NA)+ geom_jitter(width = 0.1, height = 0) +
+  ylim(c(0,5000)) +
+  my_theme + theme(legend.position = "none", axis.title.x = element_blank()) +
+  viridis::scale_fill_viridis(discrete = T, option = "B") 
+
+p2 <- ggplot(CHIR, aes(x=Treatment, y = NT_length, group = Treatment, fill = Treatment)) +
+  geom_boxplot(outlier.shape = NA)+ geom_jitter(width = 0.1, height = 0) +
+  ylim(c(0,2000)) +
+  my_theme + theme(legend.position = "none", axis.title.x = element_blank()) +
+  viridis::scale_fill_viridis(discrete = T, option = "B") 
+
+p3 <- ggplot(CHIR, aes(x=Treatment, y = NT_Wh_ratio, group = Treatment, fill = Treatment)) + 
+  ylim(c(0,90)) +
+  geom_boxplot(outlier.shape = NA)+ geom_jitter(width = 0.1, height = 0) +
+  my_theme + theme(legend.position = "none", axis.title.x = element_blank()) +
+  viridis::scale_fill_viridis(discrete = T, option = "B") 
+
+
+p_merge <-  cowplot::plot_grid(p1,p2,p3, ncol = 3) 
+
+# save plot
+save_plot(plot = p_merge, filename = "CHIR_morphology.pdf", base_height = 4, base_width = 7 )
+
+
+
+```
+# KO whole properties
+```{r}
+#Loading data
+whole <- read_excel("Quantification_KO_gastruloid.xlsx")
+
+# Reorder 
+whole$Genotype <- factor(whole$Genotype, levels = c("WT", "KO_PAX3", "KO_TBX6"))
+
+
+whole$Somite_pair_count <- as.integer(whole$Somite_pair_count)
+
+# Whole length
+p1 <- ggplot(whole, aes(x = Genotype, y = Whole_length, group = Genotype, fill = Genotype)) +
+  geom_boxplot() + geom_jitter(height = 0, width = 0.1) +
+  ylim(c(0,2500)) +
+  my_theme + theme(legend.position = "none", axis.title.x = element_blank()) +
+  viridis::scale_fill_viridis(discrete = T, option = "B") 
+
+p2 <- ggplot(whole, aes(x = Genotype, y = NT_length, group = Genotype, fill = Genotype)) +
+  geom_boxplot() + geom_jitter(height = 0, width = 0.1) +
+  ylim(c(0,2000))  +
+  my_theme +
+  theme(legend.position = "none", axis.title.x = element_blank()) +
+  viridis::scale_fill_viridis(discrete = T, option = "B") 
+
+p3 <- ggplot(whole, aes(x= Genotype, y = NT_Wh_ratio, group = Genotype, fill = Genotype)) + 
+  ylim(c(0,100)) +
+  geom_boxplot() + geom_jitter(height = 0, width = 0.1) +
+  my_theme +
+  theme(legend.position = "none", axis.title.x = element_blank()) +
+  viridis::scale_fill_viridis(discrete = T, option = "B")
+
+# Somite count
+p4 <- ggplot(whole, aes(x = Genotype, y = Somite_pair_count, group = Genotype, fill = Genotype)) +
+  geom_boxplot() + 
+  geom_jitter(height = 0, width = 0.1) +
+  ylim(c(0,12)) +
+  my_theme + 
+  theme(legend.position = "none", axis.title.x = element_blank()) + 
+  viridis::scale_fill_viridis(discrete = T, option = "B") 
+
+p_merge <-  cowplot::plot_grid(p1,p2,p3,p4, ncol = 4) 
+
+
+# save plot
+save_plot(plot = p_merge, filename = "KO_morphology.pdf", base_height = 4, base_width = 9 )
+
+
+
+
+ggsave("KO_Whole_somite_count.pdf", width = 2, height = 4)
+
+
+# Tukey multiple comparison test
+aov(NT_length ~ Genotype, data = whole) %>% TukeyHSD() 
+aov(Somite_pair_count ~ Genotype, data = whole) %>% TukeyHSD()
+aov(Whole_length ~ Genotype, data = whole) %>% TukeyHSD()
+aov(NT_Wh_ratio ~ Genotype, data = whole) %>% TukeyHSD()
+
+
+
+
+
+# Length_per_Width
+ggplot(whole, aes(x = Genotype, y = L_per_W, group = Genotype, fill = Genotype)) +
+  geom_boxplot() + 
+  geom_jitter(height = 0, width = 0.1) +
+  ylim(c(0,7)) +
+  my_theme + theme(axis.title = element_blank()) + 
+  ggtitle("Length_per_Width")
+
+
+# width transition
+long_df <-
+  whole %>% 
+  select(Genotype, Width_10_percent, Width_50_percent, Width_90_percent) %>% 
+  pivot_longer(cols = !Genotype, names_to = "position", values_to = "width")
+
+long_df %>% ggplot(aes(x = position, y = width, colour = Genotype)) + 
+  geom_boxplot()
+
+
+```
+
+
+
+# Time window LDN neural area
+```{r}
+My_col <- c("#778899", "#FFD700", "#F8B400",  "#FF8C00")
+My_order <- c("NT", "LDN_0_24h", "LDN_24_48h", "LDN_48_120h")
+
+
+
+#Loading data
+LDN <- read_excel("Quantification_Neural_area_LDN_gastruloid.xlsx")
+
+# Reorder 
+LDN$Treatment <- factor(LDN$Treatment, levels = My_order)
+
+LDN <- LDN %>% filter(Time == 120)
+
+
+ggplot(LDN, aes(x= Treatment, y = Wh_NT_ratio, colour = Treatment, fill = Treatment, group = Treatment)) +
+  geom_boxplot(color = "black", outlier.shape = NA) +
+  geom_jitter(width = 0.1) +
+  ylim(c(0,80)) +
+  my_theme +
+  scale_color_manual(values =  My_col) +
+  scale_fill_manual(values =  My_col)
+
+ggsave("LDN_timewindow_Neural_area.pdf", width = 6, height = 4)
+
+```
+
+# Retinol/Retinal/RA neural area
+```{r}
+My_col <- c("#778899", "#FFD700", "#F8B400", "#AFEEEE", "#40E0D0","#DDA0DD", "#EE82EE")
+My_order <- c("NT", "RA_500nM", "RA_3µM", "Retinol_500nM", "Retinol_3µM", "Retinal_500nM", "Retinal_3µM")
+
+#Loading data
+RA <- read_excel("Quantification_Neural_area_retinol_retinal.xlsx")
+
+# Reorder 
+RA$Treatment <- factor(RA$Treatment, levels = My_order)
+
+levels(RA$Treatment)
+
+#RA <- RA %>% filter(Time == 120)
+
+
+ggplot(RA, aes(x= Treatment, y = Wh_NT_ratio, colour = Treatment, fill = Treatment, group = Treatment)) +
+  geom_boxplot(color = "black", outlier.shape = NA) +
+  geom_jitter(width = 0.1) +
+  ylim(c(0,100)) +
+  my_theme +
+  scale_color_manual(values =  My_col) +
+  scale_fill_manual(values =  My_col)
+
+ggsave("RA_retinol_retinal_timewindow_Neural_area.pdf", width = 6, height = 4)
+```
+
+
+# SOX10 angle
+```{r}
+#Loading data
+SOX10 <- read_excel("SOX10_angle.xlsx")
+
+ggplot(SOX10, aes(x = "test", y = Angle)) +
+  geom_boxplot(fill = "#DC143C", outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_text(size =18),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size =12)
+        ) + 
+  scale_y_continuous(breaks = c(0, 90, 180, 270, 360), limits = c(0,360))
+  ggsave("SOX10_angle_boxplot.pdf", width = 2, height = 7)
+
+  
+ggplot(SOX10, aes(x = "test", y = Angle)) +
+  geom_violin(fill = "#DC143C") +
+  geom_jitter() +
+  ylim(c(0, 360)) +
+  theme_classic()
+  ggsave("SOX10_angle_violinplot.pdf", width = 2, height = 7)
+
+
+
+```
+
+
+# Epithelialized neural tube and somite
+```{r}
+
+# Load data
+data_sheet4 <- read_xlsx("Quantification_gastruloid_whole2.xlsx", sheet = "Sheet4")
+
+# Calculate percentages
+data_sheet4 <- data_sheet4 %>%
+  mutate(Epithelialized_Percent = (Epithelialized / (Epithelialized + Not_epithelialized)) * 100,
+         Not_Epithelialized_Percent = 100 - Epithelialized_Percent)
+
+# Melt data for ggplot
+melted_data <- melt(data_sheet4, id.vars = c("name", "structure"), 
+                    measure.vars = c("Not_Epithelialized_Percent", "Epithelialized_Percent"))  # Notice the order change here
+
+# Plot
+ggplot(melted_data, aes(x = name, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("grey", "blue4"), labels = c("Not_epithelialized", "Epithelialized")) +  # Notice the color order change here
+  facet_wrap(~structure, scales = "free_x") +
+  labs(y = "Percentage (%)", x = NULL) +
+  theme_minimal()+
+  theme(strip.text = element_text(face = "bold"), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, color = "black"))
+
+
+ggsave("epithelialized_somite_NT.pdf", width = 4, height = 4)
+
+```
+

@@ -1,0 +1,711 @@
+---
+title: "stembro_comparison"
+author: "Nobuhiko Hamazaki"
+date: "2023-05-03"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(stringr)
+library(RColorBrewer)
+library(tidyseurat)
+library(cowplot)
+library(ggthemes)
+library(ggplot2)
+library(biomaRt)
+library(grid)
+library(cowplot)
+library(qs)
+
+set.seed(seed = 0)
+```
+
+# loading dataset
+```{r}
+EO <- readRDS("Libby_neural_organoid/seurat_obj.rds")
+
+EMLO <-  readRDS("EMLO/EMLO_seurat_obj_subset_rm.RDS")
+
+Somitoid <- readRDS("human_somitoids/human_somitoids_b1.RDS")
+
+Segmentoid <- readRDS("human_segmentoid/segmentoid_98h.RDS")
+
+Axioloid <- readRDS("human_axioloids/axl_120h_MG_RA.RDS")
+
+TLS <- readRDS("mGastruloids/TLS_timecourse_rna.RDS")
+TLS <- subset(TLS, timepoint == "120h")
+
+
+mGas <- readRDS("mGastruloids/mGastruloids_120h_rna.RDS")
+
+# preprocessed. See somite_organoid_GSM6806916.RMD
+hAxial <- qread("GSM6806916_seurat_sct_umap_renamed.RDS")
+
+hTrunk <- readRDS("Griboud_seurat.RDS")
+
+
+```
+
+# CCR/SCT/UMAP preprocess
+```{r}
+# function for ccr sct umap
+ccr_sct_umap <- function(obj, output_name){
+  # removing cell cycle genes and mito genes
+  counts <- GetAssayData(obj, assay = "RNA")
+
+counts <- counts[-(which(str_detect(rownames(counts), "^HIST|^MT-|^TOP|^CDK|^CCN|^CDC|^CCDC|^MKI|MALAT|^NUSAP|^SMC|^CENP|^UBE|^SGO|^ASPM|^PLK|^KPN|^RP|^PTTG|^SNHG|^CK|^AUR^|^BUB|^KIF|^KCNQ|^SMO|^HMG|^S100|^LINC|^ATP|^IGFBP|^HSP|^FOS|^JUN"))), ]
+
+obj <- subset(obj, features = rownames(counts))
+obj <- subset(obj, subset = nCount_RNA >1000 & nFeature_RNA > 800 & nFeature_RNA < 10000)
+
+# run sctransform
+obj <- SCTransform(obj, verbose = FALSE)
+
+# UMAP visualization and clustering
+obj <- RunPCA(obj)
+obj <- RunUMAP(obj, dims = 1:30, verbose = FALSE)
+
+obj <- FindNeighbors(obj, dims = 1:30, verbose = FALSE)
+obj <- FindClusters(obj, verbose = FALSE, resolution = 2)
+DimPlot(obj, label = T) + NoLegend() 
+  ggsave(paste0("","UMAP_", output_name, "_ccr_sct.jpg"), width = 5, height = 4)
+
+# save RDS
+qsave(obj, paste0("", output_name,"_ccr_sct_umap.RDS") )
+
+}
+
+
+# Mouse version
+mouse_ccr_sct_umap <- function(obj, output_name){
+# cell cycle
+# removing cell cycle genes and mito genes
+counts <- GetAssayData(obj, assay = "RNA")
+
+counts <- counts[-(which(str_detect(rownames(counts), "^Hist|^Mt-|^Top|^Cdk|^Ccn|^Cdc|^Ccdc|^Mki|^Malat|^Nusap|^Smc|^Cenp|^Ube|^Sgo|^Aspm|^Plk|^Kpn|^Rp|^Pttg|^Snhg|^Ck|^Aur^|^Bub|^Kif|^Kcnq|^Smo|^Hmg|^S100|^Linc|^Atp|^Igfbp|^Hsp|^Fos|^Jun"))), ]
+obj <- subset(obj, features = rownames(counts))
+obj <- subset(obj, subset = nCount_RNA >1000 & nFeature_RNA > 800 & nFeature_RNA < 10000)
+
+# run sctransform
+obj <- SCTransform(obj, verbose = FALSE)
+
+
+# UMAP visualization and clustering
+obj <- RunPCA(obj)
+obj <- RunUMAP(obj, dims = 1:30, verbose = FALSE)
+
+obj <- FindNeighbors(obj, dims = 1:30, verbose = FALSE)
+obj <- FindClusters(obj, verbose = FALSE, resolution = 0.7)
+DimPlot(obj, label = T) + NoLegend() 
+  ggsave(paste0("","UMAP_", output_name, "_ccr_sct.jpg"), width = 5, height = 4)
+
+# save RDS
+qsave(obj, paste0("", output_name,"_ccr_sct_umap.RDS") )
+
+}
+
+
+# Run function
+# human dataset preprocess
+ccr_sct_umap(EO, "EO")
+ccr_sct_umap(Somitoid, "Somitoid")
+ccr_sct_umap(Segmentoid, "Segmentoid")
+ccr_sct_umap(Axioloid, "Axioloid")
+
+ccr_sct_umap(hTrunk, "hTrunk")
+ccr_sct_umap(hAxial, "hAxial")
+
+```
+
+# preprocess of EMLO (Rename idents)
+```{r}
+
+# RE-Labeling 
+# correcting the Cardiomyocytes to Mesenchyme
+EMLO   <- RenameIdents(object = EMLO, 
+                           'Neural tube' = 'Neural tube',
+                           'Gut' = 'Gut',
+                           'Floor plate' = 'Floor plate',
+                           'Neural progenitor cells' = 'Neural progenitor', 
+                           'Roof plate' = 'Roof plate',
+                           'Neural crest' = 'Neural crest',
+                           'Cardiomyocytes' = 'Mesenchyme',
+                           'Mesenchyme' = 'Cardiomyocytes',
+                           'Motor neurons' = 'Motor neurons',
+                           'unknown-1' = 'unknown-1',
+                           'unknown-2' = 'unknown-2',
+                           'Endothelium' = 'Endothelium'
+                           )
+```
+
+# preprocess of Segmentoid (Conversion of ensemble id to official gene symbol)
+```{r}
+# loading data
+Segmentoid <- readRDS("Segmentoid_ccr_sct_umap.RDS")
+
+# Select the Ensembl mart
+ensembl_mart <- useMart(biomart = "ensembl")
+# Select the appropriate dataset
+dataset <- useDataset("hsapiens_gene_ensembl", mart = ensembl_mart)
+
+# getting ensembl id
+ensembl_ids <- rownames(Segmentoid@assays$RNA@counts) 
+
+
+# Retrieve gene symbols
+gene_symbols <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                      filters = "ensembl_gene_id",
+                      values = ensembl_ids,
+                      mart = dataset)
+
+gene_symbols %>% head()
+
+# Check for missing gene symbols and replace with Ensembl IDs if necessary
+missing_symbols <- is.na(gene_symbols$hgnc_symbol)
+gene_symbols$hgnc_symbol[missing_symbols] <- gene_symbols$ensembl_gene_id[missing_symbols]
+
+
+# Create a named vector
+gene_id_to_symbol <- setNames(object = gene_symbols$hgnc_symbol, nm = gene_symbols$ensembl_gene_id)
+
+rownames(Segmentoid@assays$RNA@counts) <- gene_id_to_symbol[rownames(Segmentoid@assays$RNA@counts)]
+rownames(Segmentoid@assays$RNA@data) <- gene_id_to_symbol[rownames(Segmentoid@assays$RNA@data)]
+rownames(Segmentoid@assays$SCT@counts) <- gene_id_to_symbol[rownames(Segmentoid@assays$SCT@counts)]
+rownames(Segmentoid@assays$SCT@data) <- gene_id_to_symbol[rownames(Segmentoid@assays$SCT@data)]
+
+
+
+# renaming the idents
+Segmentoid   <- RenameIdents(object = Segmentoid, 
+                           '0' = 'Somite',
+                           '1' = 'Somite',
+                           '2' = 'Somite',
+                           '3' = 'Somite', 
+                           '4' = 'Somite',
+                           '5' = 'Somite',
+                           '6' = 'PSM post.',
+                           '7' = 'NMP',
+                           '8' = 'Somite',
+                           '9' = 'Somite',
+                           '10' = 'PSM ant.',
+                           '11' = 'Neural',
+                           '12' = 'Somite',
+                           '13' = 'Somite',
+                           '14' = 'PSM ant.',
+                           '15' = 'Somite',
+                           '16' = 'Somite',
+                           '17' = 'Somite'
+                           
+                           )
+
+# reordering levels
+    Segmentoid@active.ident <- factor(Segmentoid@active.ident, levels = rev(c('NMP', 'Neural', "PSM post.", "PSM ant.", 'Somite'))
+  )
+
+
+Idents(Segmentoid) %>% table()
+
+
+qsave(Segmentoid, "Segmentoid_ccr_sct_umap_gene_renamed.RDS")
+
+```
+# preprocess of Axioloid (Conversion of ensemble id to official gene symbol)
+```{r}
+# loading data
+Axioloid <- readRDS("Axioloid_ccr_sct_umap.RDS")
+
+# Select the Ensembl mart
+ensembl_mart <- useMart(biomart = "ensembl")
+# Select the appropriate dataset
+dataset <- useDataset("hsapiens_gene_ensembl", mart = ensembl_mart)
+
+# getting ensembl id
+ensembl_ids <- rownames(Axioloid@assays$RNA@counts) 
+
+
+# Retrieve gene symbols
+gene_symbols <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                      filters = "ensembl_gene_id",
+                      values = ensembl_ids,
+                      mart = dataset)
+
+gene_symbols %>% head()
+
+# Check for missing gene symbols and replace with Ensembl IDs if necessary
+missing_symbols <- is.na(gene_symbols$hgnc_symbol)
+gene_symbols$hgnc_symbol[missing_symbols] <- gene_symbols$ensembl_gene_id[missing_symbols]
+
+
+# Create a named vector
+gene_id_to_symbol <- setNames(object = gene_symbols$hgnc_symbol, nm = gene_symbols$ensembl_gene_id)
+
+rownames(Axioloid@assays$RNA@counts) <- gene_id_to_symbol[rownames(Axioloid@assays$RNA@counts)]
+rownames(Axioloid@assays$RNA@data) <- gene_id_to_symbol[rownames(Axioloid@assays$RNA@data)]
+rownames(Axioloid@assays$SCT@counts) <- gene_id_to_symbol[rownames(Axioloid@assays$SCT@counts)]
+rownames(Axioloid@assays$SCT@data) <- gene_id_to_symbol[rownames(Axioloid@assays$SCT@data)]
+
+
+
+
+FeaturePlot(object = Axioloid, features = c("CDX2", "TBX6","TBXT", "NKX1-2", "MEOX1", "ETV2"), order = T)
+
+
+# renaming the idents
+Axioloid   <- RenameIdents(object = Axioloid, 
+                           '0' = 'L-SM',
+                           '1' = 'L-SM',
+                           '2' = 'Tailbud',
+                           '3' = 'M-SM', 
+                           '4' = 'Tailbud',
+                           '5' = 'L-SM',
+                           '6' = 'M-SM',
+                           '7' = 'PSM',
+                           '8' = 'M-SM',
+                          '9' = 'Tailbud',
+                           '10' = 'Tailbud',
+                           '11' = 'EC-like',
+                           '12' = 'L-SM'
+                          
+                           )
+
+# reordering levels
+    Axioloid@active.ident <- factor(Axioloid@active.ident, levels = rev(c('Tailbud', "PSM", "M-SM", 'L-SM', "EC-like"))
+  )
+
+Idents(Axioloid) %>% table()
+
+
+qsave(Axioloid, "Axioloid_ccr_sct_umap_gene_renamed.RDS")
+
+```
+
+# preprocess of Somitoid (Manual cell type annotation)
+```{r}
+Idents(Somitoid) %>% table()
+
+FeaturePlot(object = Somitoid, features = c("SOX2", "PAX6","HES7", "MESP2","SOX1", "PAX3"), order = T)
+
+
+# renaming the idents
+Somitoid   <- RenameIdents(object = Somitoid, 
+                           '0' = 'NMP',
+                           '1' = 'Late somite',
+                           '2' = 'Late somite',
+                           '3' = 'Somite', 
+                           '4' = 'Late somite',
+                           '5' = 'NMP',
+                           '6' = 'NMP',
+                           '7' = 'PSM',
+                           '8' = 'NMP',
+                           '9' = 'Unknown'
+                           )
+# reordering levels
+    Somitoid@active.ident <- factor(Somitoid@active.ident, levels = rev(c('NMP', "PSM", 'Somite','Late somite', 'Unknown' ))
+  )
+
+
+qsave(Somitoid, "Somitoid_ccr_sct_umap_gene_renamed.RDS")
+
+```
+
+
+# preprocess of EO (Manual cell type annotation)
+```{r}
+
+EO <- readRDS("EO_ccr_sct_umap.RDS")
+
+
+Idents(EO) %>% table()
+
+FeaturePlot(object = EO, features = c("SOX2", "PAX6","HES7", "MESP2","NKX1-2", "PAX3"), order = T)
+
+
+# renaming the idents
+EO   <- RenameIdents(object = EO, 
+                           '0' = 'Neural',
+                           '1' = 'Neural',
+                           '2' = 'Neural',
+                           '3' = 'Neural', 
+                           '4' = 'Mesoderm',
+                           '5' = 'Neural',
+                           '6' = 'Neural',
+                           '7' = 'Neural',
+                           '8' = 'Mesoderm',
+                           '9' = 'Neural',
+                           '10' = 'Neural'
+                           )
+# reordering levels
+    EO@active.ident <- factor(EO@active.ident, levels = rev(c('Neural', "Mesoderm" ))
+  )
+
+
+qsave(EO, "EO_ccr_sct_umap_gene_renamed.RDS")
+
+
+
+```
+
+# preprocess of human Trunk
+```{r}
+hTrunk <- readRDS("hTrunk_ccr_sct_umap.RDS")
+
+# run sctransform
+hTrunk <- SCTransform(hTrunk, verbose = FALSE)
+
+# UMAP visualization and clustering
+hTrunk <- RunPCA(hTrunk)
+hTrunk <- RunUMAP(hTrunk, dims = 1:30, verbose = FALSE)
+
+hTrunk <- FindNeighbors(hTrunk, dims = 1:30, verbose = FALSE)
+hTrunk <- FindClusters(hTrunk, verbose = FALSE, resolution = 0.7)
+DimPlot(hTrunk, label = T, group.by = 'annotation') + NoLegend() 
+ Idents(hTrunk) <- hTrunk$annotation
+ Idents(hTrunk) %>% table()
+ 
+# reordering levels
+    hTrunk@active.ident <- factor(hTrunk@active.ident, levels = rev(c('Axial progenitors', "Neural progenitors", 'Neural crest cells', "Neurons", "Stressed cells", "Somites", "Cardiac/Nephron progenitors", "Endothelial progenitors"))
+  )
+ 
+ 
+qsave(hTrunk, "hTrunk_ccr_sct_umap_gene_renamed.RDS") 
+
+
+FeaturePlot(hTrunk, 
+            features = c("SOX2","PAX6", "ONECUT2","PAX8", "KDR", "SOX9", "TNNT2", "RIPPLY1",  "PAX3"), 
+            pt.size = 0.5, 
+            min.cutoff = 0.25, order = T, keep.scale = "all") 
+
+FeaturePlot(hTrunk, 
+            features = c("OSR1", "WT1", "LHX1","PAX8","NEB", "KDR","TTN", "RIPPLY2", "MEF2C"), 
+            pt.size = 0.5, 
+            min.cutoff = 0.25, order = T) 
+
+  FeaturePlot(hTrunk, 
+            features = c("SHH", "PTCH1", "PTCH2", "FOXA2", "NKX2-2", "CORIN"), 
+            pt.size = 0.5, 
+            min.cutoff = 0.25, order = T) 
+
+  DotPlot(hTrunk,  features = c("WT1", "OSR1", "PAX2", "PAX8","ADGRL4","LHX1", "GDNF"), dot.scale = 10, scale.min = 10, scale.max = 30, cols = c("white", "darkred")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank()) 
+  
+  
+
+```
+
+
+
+
+# loading pre-processed data
+```{r}
+# load ccr_sct_umap data
+hGas <- readRDS("hGastruloid_96h_merged_ccr_annotated.RDS")
+# reordering levels for dot plot
+hGas@active.ident <- factor(hGas@active.ident, levels = rev(c('NMP',  "PSM", "Differentiation front", 'Somite', 'Advanced Meso.', 'Advanced meso.',  'Cardiomyocyte', 'Notochord-like', 'Gut' ))
+)
+
+
+RA <- readRDS(file = "RA_hGastruloid_120h_merged_ccr_annotated2.RDS")
+# reordering levels
+    RA@active.ident <- factor(RA@active.ident, levels = rev(c('NMP', 'Neural tube', 'Neural crest', 'Neural progenitor', "Differentiation front", 'Somite','Myocyte', 'Cardiac meso', 'Cardiac myocyte', 'Intermediate meso', 'Renal epithelium', 'Endothelium', 'Gut' ))
+  )
+
+    
+EO <- readRDS("EO_ccr_sct_umap_gene_renamed.RDS")
+
+
+EMLO <-  readRDS("EMLO/EMLO_seurat_obj_subset_rm_renamed.RDS")
+    # reordering levels
+    EMLO@active.ident <- factor(EMLO@active.ident, levels = rev(c('Neural tube', 'Floor plate', 'Roof plate','Neural crest', 'Neural progenitor', 'Motor neurons', 'Cardiomyocytes','Mesenchyme',  'unknown-1', 'unknown-2', 'Endothelium', 'Gut' )))
+
+
+    
+Somitoid <- readRDS("Somitoid_ccr_sct_umap_gene_renamed.RDS")
+
+Segmentoid <- readRDS("Segmentoid_ccr_sct_umap_gene_renamed.RDS")
+
+Axioloid <- readRDS("Axioloid_ccr_sct_umap_gene_renamed.RDS")
+
+# loading original data
+TLS <- readRDS("mGastruloids/TLS_timecourse_rna.RDS")
+TLS <- subset(TLS, timepoint == "120h")
+TLS <- RenameIdents(TLS, "PCGLC" = "PGCLC") 
+
+    # Reorder levels for dot plot
+   TLS@active.ident <- factor(TLS@active.ident, levels = rev(c("NMPs", 'NeuralTube1', 'NeuralTube2', 'pPSM', 'aPSM', 'Somite-1', 'Somite0','Somite', 'SomiteSclero', 'SomiteDermo', 'Endoderm',  'Endothelial', 'PGCLC'))
+)
+ 
+
+mGas <- readRDS("gastruloid_mouse_Brink/mGastruloids_120h_rna_reannotated.RDS")
+    # Reorder levels for dot plot
+   mGas@active.ident <- factor(mGas@active.ident, levels = rev(c("NMP", 'Neural tube', 'PSM', 'Differentiation front', 'Somite','Advanced Meso.', 'Cardiac meso.', 'Gut', 'Allantois', 'Endothelium', 'PGCLC'))
+)
+
+hAxial <- qread("GSM6806916_seurat_sct_umap_renamed.RDS")
+
+hTrunk <- readRDS("hTrunk_ccr_sct_umap.RDS")
+
+
+   
+# UMAP   
+DimPlot(RA, label = T)
+DimPlot(EO, label = T)
+DimPlot(EMLO, label = T)
+DimPlot(Somitoid, label = T)
+DimPlot(Segmentoid, label = T)
+DimPlot(Axioloid, label = T)
+DimPlot(TLS, label = T)
+DimPlot(mGas, label = T)
+DimPlot(hAxial, label = T)
+DimPlot(hTrunk, label = T)
+
+
+
+
+dots <- function(obj){
+ DotPlot(obj, assay = "RNA", features = c("WT1", "OSR1", "PAX2", "PAX8","ADGRL4","LHX1", "EMX2",  "GDNF"), dot.scale = 10, scale.min = 10, scale.max = 30, cols = c("white", "darkred")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank()) 
+}
+
+
+dots(RA)
+dots(EO)
+dots(EMLO)
+dots(Somitoid)
+dots(Segmentoid)
+dots(Axioloid)
+dots(hAxial)
+dots(hTrunk)
+
+dotsM <- function(obj){
+ DotPlot(obj, assay = "RNA", features = c("Wt1", "Osr1", "Pax2", "Pax8","Adgrl4","Lhx1", "Emx2",  "Gdnf"), dot.scale = 10, scale.min = 10, scale.max = 30, cols = c("white", "darkred")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank()) 
+}
+
+dotsM(TLS)
+dotsM(mGas)
+```
+
+# dot plot for cell type comparison
+```{r}
+
+# original hGas
+# Dotplot
+p1 <-    DotPlot(hGas, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 60, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in")) +
+  labs(title = "Human non-RA Gastruloid", x = "", y = "")
+    
+
+
+# RA_120h
+  # Dotplot
+p2 <-      DotPlot(RA, assay = "SCT", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 30, cols = c("white", "#411445")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x  = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in")) +
+  labs(title = "Human RA Gastruloid", x = "", y = "")
+    
+
+# Somitoid
+p3 <-    DotPlot(Somitoid, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 80, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in"))  +
+  labs(title = "Human Somitoid", x = "", y = "")
+    
+    
+
+# Segmentoid
+p4 <-    DotPlot(Segmentoid, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 80, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in"))  +
+  labs(title = "Human Segmentoid", x = "", y = "")
+    
+    
+
+# Axioloid
+ p5 <-   DotPlot(Axioloid, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 60, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in"))  +
+  labs(title = "Human Axioloid", x = "", y = "")
+    
+    
+
+      
+#EMLO
+  # Dotplot
+p6 <-    DotPlot(EMLO, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 80, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in"))  +
+  labs(title = "Human EMLO", x = "", y = "")
+    
+
+    
+    
+# EO
+p7 <-    DotPlot(EO, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 50, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in"))  +
+  labs(title = "Human EO", x = "", y = "")
+    
+    
+
+   
+
+    
+# mGas
+p8 <-  DotPlot(mGas, assay = "RNA", features = c("Sox2","Pax6", "Sox10", "Onecut2",  "Ripply1",  "Fst", "Neb", "Dlk1","Tnnt2", "Wt1", "Gdnf", "Plvap", "Apoa2"), dot.scale = 10, scale.min = 7, scale.max = 20, cols = c("white", "#165E83")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in"))+
+  labs(title = "Mouse Gastruloid", x = "", y = "")
+  
+
+
+# mTLS
+p9 <-  DotPlot(TLS, assay = "RNA", features = c("Sox2", "Pax6", "Sox10", "Onecut2",  "Ripply1",  "Fst", "Neb", "Dlk1","Tnnt2", "Wt1", "Gdnf", "Plvap", "Apoa2"), dot.scale = 10, scale.min = 20, scale.max = 60, cols = c("white", "#165E83")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in")) +
+  labs(title = "Mouse TLS", x = "", y = "")
+  
+
+
+# Human Axial organoid
+p10 <- DotPlot(hAxial, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 40, cols = c("white", "orange")
+      ) + 
+     theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in")) +
+  labs(title = "Human axial organoid", x = "", y = "")
+  
+    
+# Human trunk organoid
+p11 <- DotPlot(hTrunk, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 40, cols = c("white", "orange")
+      ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_text(size = 16), panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 0, 0.5, 0, "in")) +
+  labs(title = "Human trunk organoid TLS", x = "", y = "")
+  
+    
+
+#  ggsave("mTLS_ccr_annotated_dotplot_bubble.pdf", width = 13, height = 9)
+  
+  plotrow1 <- plot_grid(p1, p2, ncol = 3, align = "hv", axis = "l")
+  plotrow2 <- plot_grid(p3, p4, p5, ncol = 3, align = "hv", axis = "l")
+  plotrow3 <- plot_grid(p6, p7, p10, ncol = 3, align = "hv", axis = "l")
+  plotrow4 <- plot_grid(p11, p9, p8, ncol = 3, align = "hv", axis = "l")
+  
+  final_grid <- plot_grid(plotrow1, plotrow2, plotrow3, plotrow4, nrow = 4, align = "hv", axis = "l", rel_heights = c(1, 1))
+
+
+# Save the aligned plots as a PDF
+ggsave("ALL_dotplot_bubble_withgenename.pdf", plot = final_grid, device = "pdf", width = 30, height = 25, units = "in")
+```
+
+# dot plot (no gene name)for cell type comparison
+```{r}
+
+# original hGas
+# Dotplot
+p1 <-    DotPlot(hGas, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 60, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in")) +
+  labs(title = "Human non-RA Gastruloid", x = "", y = "") 
+    
+
+
+# RA_120h
+  # Dotplot
+p2 <-      DotPlot(RA, assay = "SCT", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 30, cols = c("white", "#411445")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x  = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in")) +
+  labs(title = "Human RA Gastruloid", x = "", y = "")
+    
+
+# Somitoid
+p3 <-    DotPlot(Somitoid, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 80, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in"))  +
+  labs(title = "Human Somitoid", x = "", y = "")
+    
+    
+
+# Segmentoid
+p4 <-    DotPlot(Segmentoid, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 80, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in"))  +
+  labs(title = "Human Segmentoid", x = "", y = "")
+    
+    
+
+# Axioloid
+ p5 <-   DotPlot(Axioloid, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 60, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in"))  +
+  labs(title = "Human Axioloid", x = "", y = "")
+    
+    
+
+      
+#EMLO
+  # Dotplot
+p6 <-    DotPlot(EMLO, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 20, scale.max = 80, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in"))  +
+  labs(title = "Human EMLO", x = "", y = "")
+    
+
+    
+    
+# EO
+p7 <-    DotPlot(EO, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 50, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in"))  +
+  labs(title = "Human EO", x = "", y = "")
+    
+    
+
+   
+# mGas
+p8 <-  DotPlot(mGas, assay = "RNA", features = c("Sox2","Pax6", "Foxd3", "Onecut2",  "Ripply1",  "Fst", "Neb", "Dlk1","Tnnt2", "Wt1", "Gdnf", "Plvap", "Apoa2"), dot.scale = 10, scale.min = 7, scale.max = 20, cols = c("white", "#165E83")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in"))+
+  labs(title = "Mouse Gastruloid", x = "", y = "")
+  
+
+
+# mTLS
+p9 <-  DotPlot(TLS, assay = "RNA", features = c("Sox2", "Pax6", "Foxd3", "Onecut2",  "Ripply1",  "Fst", "Neb", "Dlk1","Tnnt2", "Wt1", "Gdnf", "Plvap", "Apoa2"), dot.scale = 10, scale.min = 20, scale.max = 60, cols = c("white", "#165E83")
+    ) + 
+    theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in")) +
+  labs(title = "Mouse TLS", x = "", y = "")
+
+
+
+# Human Axial organoid
+p10 <- DotPlot(hAxial, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 40, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in"))  +
+  labs(title = "Human axial organoid", x = "", y = "")
+    
+# Human trunk organoid
+p11 <- DotPlot(hTrunk, assay = "RNA", features = c("SOX2", "PAX6", "FOXD3", "ONECUT2",  "RIPPLY1",  "FST", "NEB", "DLK1","TNNT2", "WT1", "GDNF", "PLVAP", "APOA2"), dot.scale = 10, scale.min = 10, scale.max = 40, cols = c("white", "orange")
+      ) + 
+      theme(panel.background = element_blank(), strip.background = element_blank(), axis.title = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16), axis.text.y = element_blank(), legend.position = "none", panel.grid.major.x = element_blank(), plot.margin = margin(0.5, 2, 0.5, 2, "in"))  +
+  labs(title = "Human trunk organoid", x = "", y = "")
+    
+
+  
+#  ggsave("mTLS_ccr_annotated_dotplot_bubble.pdf", width = 13, height = 9)
+  
+  plotrow1 <- plot_grid(p1, p2, ncol = 3, align = "hv", axis = "l")
+  plotrow2 <- plot_grid(p3, p4, p5, ncol = 3, align = "hv", axis = "l")
+  plotrow3 <- plot_grid(p6, p7, p10, ncol = 3, align = "hv", axis = "l")
+  plotrow4 <- plot_grid(p11, p9, p8, ncol = 3, align = "hv", axis = "l")
+  
+  final_grid <- plot_grid(plotrow1, plotrow2, plotrow3, plotrow4, nrow = 4, align = "hv", axis = "l", rel_heights = c(1, 1))
+
+
+# Save the aligned plots as a PDF
+ggsave("ALL_dotplot_bubble.pdf", plot = final_grid, device = "pdf", width = 30, height = 25, units = "in")
+```
+
